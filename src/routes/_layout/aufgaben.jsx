@@ -1,6 +1,8 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
-import { Plus, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { createFileRoute } from '@tanstack/react-router';
+import { Plus, ArrowUpDown, ArrowUp, ArrowDown, PenSquare, Trash2, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useForm } from '@tanstack/react-form';
+import { useAuth } from '../__root';
 import {
   useReactTable,
   getCoreRowModel,
@@ -74,52 +76,162 @@ export const Route = createFileRoute('/_layout/aufgaben')({
 });
 
 function AufgabenPage() {
-  // Mock-Daten für die Aufgaben-Tabelle
-  const data = useMemo(
-    () => [
-      {
-        id: 1,
-        title: 'Mockup erstellen',
-        status: 'in Arbeit',
-        priority: 'Mittel',
-        dueDate: '31.03.2026',
-        assignee: 'Nutzer123',
-      },
-      {
-        id: 2,
-        title: 'Abgabe',
-        status: 'Neu',
-        priority: 'Hoch',
-        dueDate: '10.04.2026',
-        assignee: 'Nutzer123',
-      },
-      {
-        id: 3,
-        title: 'Code Review',
-        status: 'Erledigt',
-        priority: 'Niedrig',
-        dueDate: '15.02.2026',
-        assignee: 'Max Mustermann',
-      },
-      {
-        id: 4,
-        title: 'Testing durchführen',
-        status: 'in Arbeit',
-        priority: 'Hoch',
-        dueDate: '20.03.2026',
-        assignee: 'Erika Musterfrau',
-      },
-      {
-        id: 5,
-        title: 'Dokumentation schreiben',
-        status: 'Neu',
-        priority: 'Mittel',
-        dueDate: '25.03.2026',
-        assignee: 'Jon Doe',
-      },
-    ],
-    []
-  );
+  const { isAdmin } = useAuth();
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState(null);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [deleteTaskId, setDeleteTaskId] = useState(null);
+
+  // Mock-Liste der Benutzer für "Zugewiesen an"
+  const userOptions = [
+    'Admin',
+    'Nutzer123',
+    'Erika Musterfrau',
+    'Max Mustermann',
+    'Jon Doe',
+    'Chris Coder',
+  ];
+
+  // Mock-Daten für die Aufgaben-Tabelle (lokaler State, keine DB)
+  const [tasks, setTasks] = useState([
+    {
+      id: 1,
+      title: 'Mockup erstellen',
+      status: 'in Arbeit',
+      priority: 'Mittel',
+      dueDate: '31.03.2026',
+      assignee: 'Nutzer123',
+    },
+    {
+      id: 2,
+      title: 'Abgabe',
+      status: 'Neu',
+      priority: 'Hoch',
+      dueDate: '10.04.2026',
+      assignee: 'Nutzer123',
+    },
+    {
+      id: 3,
+      title: 'Code Review',
+      status: 'Erledigt',
+      priority: 'Niedrig',
+      dueDate: '15.02.2026',
+      assignee: 'Max Mustermann',
+    },
+    {
+      id: 4,
+      title: 'Testing durchführen',
+      status: 'in Arbeit',
+      priority: 'Hoch',
+      dueDate: '20.03.2026',
+      assignee: 'Erika Musterfrau',
+    },
+    {
+      id: 5,
+      title: 'Dokumentation schreiben',
+      status: 'Neu',
+      priority: 'Mittel',
+      dueDate: '25.03.2026',
+      assignee: 'Jon Doe',
+    },
+  ]);
+
+  // Helpers für Admin-Aktionen
+  function openCreateForm() {
+    if (!isAdmin) return;
+    setEditingTaskId(null);
+    setIsFormOpen(true);
+  }
+
+  function openEditForm(task) {
+    if (!isAdmin) return;
+    setEditingTaskId(task.id);
+    form.setValues({
+      title: task.title,
+      status: task.status,
+      priority: task.priority,
+      dueDate: task.dueDate,
+      assignee: task.assignee,
+    });
+    setIsFormOpen(true);
+  }
+
+  function deleteTask(taskId) {
+    if (!isAdmin) return;
+    setDeleteTaskId(taskId);
+    setIsDeleteOpen(true);
+  }
+
+  function confirmDelete() {
+    if (!isAdmin || !deleteTaskId) return;
+    setTasks((prev) => prev.filter((task) => task.id !== deleteTaskId));
+    setIsDeleteOpen(false);
+    setDeleteTaskId(null);
+  }
+
+  function cancelDelete() {
+    setIsDeleteOpen(false);
+    setDeleteTaskId(null);
+  }
+
+  /**
+   * TanStack Form – wie funktioniert es hier?
+   * =========================================
+   * 
+   * Was ist TanStack Form?
+   * - Eine headless Formular-Bibliothek: Sie liefert Logik (State/Validierung/Submit)
+   *   und wir gestalten das UI mit Tailwind.
+   * 
+   * Warum nutzen wir TanStack Form (Vorteile)?
+   * - Zentrale Logik statt viele einzelne useState-Handler
+   * - Validierung pro Feld + saubere Fehlerausgabe
+   * - Einheitlicher Submit-Flow (async/await)
+   * - Skalierbar für große Formulare
+   * 
+   * Nachteile (ehrlich):
+   * - Etwas mehr Boilerplate als native Formulare
+   * - Zusätzliche Abstraktion, die man verstehen muss
+   * 
+   * Wie arbeitet es?
+   * 1) useForm() verwaltet Formular-State und liefert form.Field.
+   * 2) Jedes Feld registriert sich über <form.Field> (Name + Validatoren).
+   * 3) form.handleSubmit() validiert und ruft onSubmit auf.
+   */
+  const form = useForm({
+    defaultValues: {
+      title: '',
+      status: 'Neu',
+      priority: 'Mittel',
+      dueDate: '',
+      assignee: userOptions[0],
+    },
+    onSubmit: async ({ value }) => {
+      if (!isAdmin) return;
+
+      if (editingTaskId) {
+        setTasks((prev) =>
+          prev.map((task) =>
+            task.id === editingTaskId
+              ? { ...task, ...value }
+              : task
+          )
+        );
+      } else {
+        const nextId = Math.max(0, ...tasks.map((t) => t.id)) + 1;
+        setTasks((prev) => [
+          ...prev,
+          {
+            id: nextId,
+            ...value,
+          },
+        ]);
+      }
+
+      setIsFormOpen(false);
+      setEditingTaskId(null);
+      form.reset();
+    },
+  });
 
   // Spalten-Definition für TanStack Table
   const columns = useMemo(
@@ -178,8 +290,37 @@ function AufgabenPage() {
         accessorKey: 'assignee',
         header: 'Zugewiesen an',
       },
+      ...(isAdmin
+        ? [
+            {
+              id: 'actions',
+              header: 'Aktionen',
+              cell: ({ row }) => (
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => openEditForm(row.original)}
+                    className="text-blue-600 hover:text-blue-800"
+                    aria-label="Aufgabe bearbeiten"
+                  >
+                    <PenSquare size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteTask(row.original.id)}
+                    className="text-red-600 hover:text-red-800"
+                    aria-label="Aufgabe löschen"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              ),
+              size: 120,
+            },
+          ]
+        : []),
     ],
-    []
+    [isAdmin]
   );
 
   // Sortier-State
@@ -187,7 +328,7 @@ function AufgabenPage() {
 
   // TanStack Table Instance erstellen
   const table = useReactTable({
-    data,
+    data: tasks,
     columns,
     state: {
       sorting,
@@ -203,22 +344,6 @@ function AufgabenPage() {
       <div className="mb-6">
         <div className="flex items-center gap-4 mb-4">
           <h2 className="text-lg font-semibold text-gray-700">Aufgabenliste</h2>
-        </div>
-        
-        {/* Navigation zwischen Task-Liste und Task-Erstellung */}
-        <div className="flex items-center gap-2 mb-4">
-          <Link
-            to="/aufgaben"
-            className="px-3 py-1.5 text-sm rounded-md bg-blue-500 text-white hover:bg-blue-600 transition-colors"
-          >
-            Task-Liste
-          </Link>
-          <Link
-            to="/aufgaben/neu"
-            className="px-3 py-1.5 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
-          >
-            Task erstellen
-          </Link>
         </div>
         
         {/* Filter Tabs */}
@@ -290,14 +415,218 @@ function AufgabenPage() {
         {table.getRowModel().rows.length} Aufgabe(n) • Klicke auf Spalten-Überschriften zum Sortieren
       </div>
 
-      {/* Floating Action Button (FAB) - Plus Button unten rechts */}
-      <Link
-        to="/aufgaben/neu"
-        className="fixed bottom-8 right-8 w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center"
-        aria-label="Neue Aufgabe erstellen"
-      >
-        <Plus size={24} />
-      </Link>
+      {/* Floating Action Button (FAB) - nur Admins */}
+      {isAdmin && (
+        <button
+          type="button"
+          onClick={openCreateForm}
+          className="fixed bottom-8 right-8 w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center"
+          aria-label="Neue Aufgabe erstellen"
+        >
+          <Plus size={24} />
+        </button>
+      )}
+
+      {/* Modal: Task erstellen/bearbeiten (nur Admin) */}
+      {isAdmin && isFormOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setIsFormOpen(false)} />
+          <div className="relative bg-white w-full max-w-lg rounded-lg shadow-xl border border-gray-200 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {editingTaskId ? 'Aufgabe bearbeiten' : 'Neue Aufgabe erstellen'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsFormOpen(false)}
+                className="p-1 text-gray-500 hover:text-gray-700"
+                aria-label="Schließen"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                form.handleSubmit();
+              }}
+              className="space-y-4"
+            >
+              <form.Field
+                name="title"
+                validators={{
+                  onChange: ({ value }) =>
+                    !value ? 'Titel ist erforderlich' : undefined,
+                }}
+              >
+                {(field) => (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Titel
+                    </label>
+                    <input
+                      type="text"
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="z.B. Mockup erstellen"
+                    />
+                    {field.state.meta.errors?.length ? (
+                      <p className="text-xs text-red-600 mt-1">
+                        {field.state.meta.errors[0]}
+                      </p>
+                    ) : null}
+                  </div>
+                )}
+              </form.Field>
+
+              <div className="grid grid-cols-2 gap-4">
+                <form.Field name="status">
+                  {(field) => (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Status
+                      </label>
+                      <select
+                        value={field.state.value}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="Neu">Neu</option>
+                        <option value="in Arbeit">in Arbeit</option>
+                        <option value="Erledigt">Erledigt</option>
+                      </select>
+                    </div>
+                  )}
+                </form.Field>
+
+                <form.Field name="priority">
+                  {(field) => (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Priorität
+                      </label>
+                      <select
+                        value={field.state.value}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="Niedrig">Niedrig</option>
+                        <option value="Mittel">Mittel</option>
+                        <option value="Hoch">Hoch</option>
+                      </select>
+                    </div>
+                  )}
+                </form.Field>
+              </div>
+
+              <form.Field name="assignee">
+                {(field) => (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Zugewiesen an
+                    </label>
+                    <select
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      {userOptions.map((user) => (
+                        <option key={user} value={user}>
+                          {user}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </form.Field>
+
+              <form.Field
+                name="dueDate"
+                validators={{
+                  onChange: ({ value }) =>
+                    !value ? 'Fälligkeitsdatum ist erforderlich' : undefined,
+                }}
+              >
+                {(field) => (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Fällig am
+                    </label>
+                    <input
+                      type="date"
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    {field.state.meta.errors?.length ? (
+                      <p className="text-xs text-red-600 mt-1">
+                        {field.state.meta.errors[0]}
+                      </p>
+                    ) : null}
+                  </div>
+                )}
+              </form.Field>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsFormOpen(false)}
+                  className="px-4 py-2 text-sm border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                  {editingTaskId ? 'Speichern' : 'Erstellen'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Löschen bestätigen (nur Admin) */}
+      {isAdmin && isDeleteOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={cancelDelete} />
+          <div className="relative bg-white w-full max-w-md rounded-lg shadow-xl border border-gray-200 p-6">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-semibold text-gray-900">Aufgabe löschen?</h3>
+              <button
+                type="button"
+                onClick={cancelDelete}
+                className="p-1 text-gray-500 hover:text-gray-700"
+                aria-label="Schließen"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-6">
+              Diese Aktion kann nicht rückgängig gemacht werden. Möchtest du die Aufgabe wirklich löschen?
+            </p>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={cancelDelete}
+                className="px-4 py-2 text-sm border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+              >
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                className="px-4 py-2 text-sm bg-red-600 text-white rounded-md hover:bg-red-700"
+              >
+                Löschen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

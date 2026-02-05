@@ -53,23 +53,84 @@ function LayoutComponent() {
   }
 
   return (
-    <div className="flex h-screen bg-gray-100">
-      {/* Sidebar - Linke Navigation */}
-      <aside className="w-56 bg-white border-r border-gray-200 flex flex-col">
-        {/* Sidebar Header mit Hamburger Menu */}
-        <div className="p-4 border-b border-gray-200 flex items-center gap-3">
-          <button className="p-1 hover:bg-gray-100 rounded">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="3" y1="6" x2="21" y2="6"></line>
-              <line x1="3" y1="12" x2="21" y2="12"></line>
-              <line x1="3" y1="18" x2="21" y2="18"></line>
-            </svg>
-          </button>
-          <h1 className="text-lg font-semibold text-gray-800">Taskmanager</h1>
-        </div>
+    <div className="flex h-screen bg-gray-100 flex-col">
+      {/* Header über die komplette Breite */}
+      <header className="bg-white border-b border-gray-200 px-6 py-3">
+        <div className="flex items-center justify-between">
+          {/* Linker Bereich: App-Titel (gleichbreit wie Sidebar) */}
+          <div className="w-56">
+            <h1 className="text-lg font-semibold text-gray-800">Taskmanager</h1>
+          </div>
 
-        {/* Haupt-Navigation */}
-        <nav className="flex-1 p-3">
+          {/* Suchleiste startet dort, wo auch der Inhalt beginnt */}
+          <div className="flex-1 flex items-center justify-between">
+            <div className="max-w-md w-full">
+              <input
+                type="text"
+                placeholder="Aufgabe suchen..."
+                className="w-full px-4 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+
+            <div className="flex items-center gap-3 ml-6">
+              {/* User Menu Button - Dropdown mit Login/Logout */}
+              <div className="relative">
+                <button 
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  className="flex items-center gap-2 p-1 hover:bg-gray-100 rounded-md transition-colors"
+                >
+                  <div className="w-8 h-8 bg-linear-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white">
+                    <span className="text-sm font-medium">{session?.username ? session.username.charAt(0).toUpperCase() : 'U'}</span>
+                  </div>
+                </button>
+
+                {/* User Menu Dropdown */}
+                {showUserMenu && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                    {isAuthenticated ? (
+                      <>
+                        {/* User Info */}
+                        <div className="px-4 py-3 border-b border-gray-100">
+                          <p className="text-xs text-gray-500 uppercase font-semibold">Angemeldet als</p>
+                          <p className="font-medium text-gray-900">{session?.username}</p>
+                        </div>
+
+                        {/* Logout Button */}
+                        <button
+                          onClick={handleLogout}
+                          className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                        >
+                          <LogOut size={16} />
+                          Abmelden
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        {/* Login Button */}
+                        <Link
+                          to="/login"
+                          onClick={() => setShowUserMenu(false)}
+                          className="flex items-center gap-3 px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 transition-colors"
+                        >
+                          <LogIn size={16} />
+                          Anmelden
+                        </Link>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Body: Sidebar + Content */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar - Linke Navigation */}
+        <aside className="w-56 bg-white border-r border-gray-200 flex flex-col">
+          {/* Haupt-Navigation */}
+          <nav className="flex-1 p-3">
           <ul className="space-y-1">
             <li>
               <Link
@@ -122,89 +183,10 @@ function LayoutComponent() {
         )}
       </aside>
 
-      {/* Main Content Area - Rechter Bereich */}
-      <div className="flex-1 flex flex-col overflow-hidden bg-gray-50">
-        {/* Header mit Suchleiste und User-Menü */}
-        <header className="bg-white border-b border-gray-200 px-6 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex-1 max-w-md">
-              <input
-                type="text"
-                placeholder="Aufgabe suchen oder erstellen"
-                className="w-full px-4 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-            <div className="flex items-center gap-3 ml-6">
-              {/* Filter Icon */}
-              <button className="p-2 hover:bg-gray-100 rounded-md transition-colors">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
-                </svg>
-              </button>
-              
-              {/* User Menu Button - Dropdown mit Login/Logout */}
-              <div className="relative">
-                <button 
-                  onClick={() => setShowUserMenu(!showUserMenu)}
-                  className="flex items-center gap-2 p-1 hover:bg-gray-100 rounded-md transition-colors"
-                >
-                  <div className="w-8 h-8 bg-linear-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white">
-                    <span className="text-sm font-medium">{session?.username ? session.username.charAt(0).toUpperCase() : 'U'}</span>
-                  </div>
-                </button>
-
-                {/* User Menu Dropdown */}
-                {showUserMenu && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
-                    {isAuthenticated ? (
-                      <>
-                        {/* User Info */}
-                        <div className="px-4 py-3 border-b border-gray-100">
-                          <p className="text-xs text-gray-500 uppercase font-semibold">Angemeldet als</p>
-                          <p className="font-medium text-gray-900">{session?.username}</p>
-                        </div>
-
-                        {/* Logout Button */}
-                        <button
-                          onClick={handleLogout}
-                          className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
-                        >
-                          <LogOut size={16} />
-                          Abmelden
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        {/* Login Button */}
-                        <Link
-                          to="/login"
-                          onClick={() => setShowUserMenu(false)}
-                          className="flex items-center gap-3 px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 transition-colors"
-                        >
-                          <LogIn size={16} />
-                          Anmelden
-                        </Link>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </header>
-
-        {/* Main Content - Hier werden die Kind-Routen gerendert */}
-        <main className="flex-1 overflow-auto p-6">
+        {/* Main Content Area - Rechter Bereich */}
+        <div className="flex-1 flex flex-col overflow-hidden bg-gray-50">
+          {/* Main Content - Hier werden die Kind-Routen gerendert */}
+          <main className="flex-1 overflow-auto p-6">
           {/* 
             <Outlet /> - Der zentrale Render-Platz für Kind-Routen
             
@@ -214,7 +196,8 @@ function LayoutComponent() {
             - /papierkorb -> papierkorb.jsx wird hier gerendert
           */}
           <Outlet />
-        </main>
+          </main>
+        </div>
       </div>
     </div>
   );
