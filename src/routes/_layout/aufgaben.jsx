@@ -1,5 +1,28 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, Link } from '@tanstack/react-router';
 import { Plus, User, Calendar } from 'lucide-react';
+
+/**
+ * Datei-basiertes Routing in TanStack Router
+ * -----------------------------------------
+ * TanStack Router nutzt die Dateistruktur unter src/routes/, um automatisch
+ * Routen zu erstellen. Jede .jsx/.tsx Datei wird zu einer Route.
+ * 
+ * Diese Datei liegt in: src/routes/_layout/aufgaben.jsx
+ * => Daraus wird automatisch die URL: /aufgaben
+ * 
+ * Verschachtelte (Nested) Routen
+ * ------------------------------
+ * Unterordner und Dateien mit gleichem Präfix erzeugen Unterrouten:
+ * - src/routes/_layout/aufgaben/neu.jsx => URL: /aufgaben/neu
+ * 
+ * Beide Routen teilen sich das Layout aus src/routes/_layout.jsx,
+ * da sie beide im _layout Ordner liegen.
+ * 
+ * Vorteile:
+ * - Automatisches Routing ohne manuelle Route-Konfiguration
+ * - Klare Ordnerstruktur = URL-Struktur
+ * - Type-Safety für Route-Parameter und Navigation
+ */
 
 export const Route = createFileRoute('/_layout/aufgaben')({
   component: AufgabenPage,
@@ -31,7 +54,23 @@ function AufgabenPage() {
       {/* Header Bereich */}
       <div className="mb-6">
         <div className="flex items-center gap-4 mb-4">
-          <h2 className="text-lg font-semibold text-gray-700">Prio∇ Aufgabenliste</h2>
+          <h2 className="text-lg font-semibold text-gray-700">Aufgabenliste</h2>
+        </div>
+        
+        {/* Navigation zwischen Task-Liste und Task-Erstellung */}
+        <div className="flex items-center gap-2 mb-4">
+          <Link
+            to="/aufgaben"
+            className="px-3 py-1.5 text-sm rounded-md bg-blue-500 text-white hover:bg-blue-600 transition-colors"
+          >
+            Task-Liste
+          </Link>
+          <Link
+            to="/aufgaben/neu"
+            className="px-3 py-1.5 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            Task erstellen
+          </Link>
         </div>
         
         {/* Filter Tabs */}

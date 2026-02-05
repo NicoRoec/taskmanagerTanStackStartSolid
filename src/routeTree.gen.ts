@@ -23,6 +23,9 @@ import { Route as DemoFormSimpleRouteImport } from './routes/demo/form.simple'
 import { Route as DemoFormAddressRouteImport } from './routes/demo/form.address'
 import { Route as DemoApiTqTodosRouteImport } from './routes/demo/api.tq-todos'
 import { Route as DemoApiNamesRouteImport } from './routes/demo/api.names'
+import { Route as LayoutAufgabenNeuRouteImport } from './routes/_layout/aufgaben/neu'
+import { Route as LayoutAdminProjektRouteImport } from './routes/_layout/admin/projekt'
+import { Route as LayoutAdminNutzerRouteImport } from './routes/_layout/admin/nutzer'
 import { Route as DemoStartSsrIndexRouteImport } from './routes/demo/start.ssr.index'
 import { Route as DemoStartSsrSpaModeRouteImport } from './routes/demo/start.ssr.spa-mode'
 import { Route as DemoStartSsrFullSsrRouteImport } from './routes/demo/start.ssr.full-ssr'
@@ -97,6 +100,21 @@ const DemoApiNamesRoute = DemoApiNamesRouteImport.update({
   path: '/demo/api/names',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LayoutAufgabenNeuRoute = LayoutAufgabenNeuRouteImport.update({
+  id: '/neu',
+  path: '/neu',
+  getParentRoute: () => LayoutAufgabenRoute,
+} as any)
+const LayoutAdminProjektRoute = LayoutAdminProjektRouteImport.update({
+  id: '/admin/projekt',
+  path: '/admin/projekt',
+  getParentRoute: () => LayoutRoute,
+} as any)
+const LayoutAdminNutzerRoute = LayoutAdminNutzerRouteImport.update({
+  id: '/admin/nutzer',
+  path: '/admin/nutzer',
+  getParentRoute: () => LayoutRoute,
+} as any)
 const DemoStartSsrIndexRoute = DemoStartSsrIndexRouteImport.update({
   id: '/demo/start/ssr/',
   path: '/demo/start/ssr/',
@@ -120,12 +138,15 @@ const DemoStartSsrDataOnlyRoute = DemoStartSsrDataOnlyRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/aufgaben': typeof LayoutAufgabenRoute
+  '/aufgaben': typeof LayoutAufgabenRouteWithChildren
   '/dashboard': typeof LayoutDashboardRoute
   '/papierkorb': typeof LayoutPapierkorbRoute
   '/demo/store': typeof DemoStoreRoute
   '/demo/table': typeof DemoTableRoute
   '/demo/tanstack-query': typeof DemoTanstackQueryRoute
+  '/admin/nutzer': typeof LayoutAdminNutzerRoute
+  '/admin/projekt': typeof LayoutAdminProjektRoute
+  '/aufgaben/neu': typeof LayoutAufgabenNeuRoute
   '/demo/api/names': typeof DemoApiNamesRoute
   '/demo/api/tq-todos': typeof DemoApiTqTodosRoute
   '/demo/form/address': typeof DemoFormAddressRoute
@@ -139,12 +160,15 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/aufgaben': typeof LayoutAufgabenRoute
+  '/aufgaben': typeof LayoutAufgabenRouteWithChildren
   '/dashboard': typeof LayoutDashboardRoute
   '/papierkorb': typeof LayoutPapierkorbRoute
   '/demo/store': typeof DemoStoreRoute
   '/demo/table': typeof DemoTableRoute
   '/demo/tanstack-query': typeof DemoTanstackQueryRoute
+  '/admin/nutzer': typeof LayoutAdminNutzerRoute
+  '/admin/projekt': typeof LayoutAdminProjektRoute
+  '/aufgaben/neu': typeof LayoutAufgabenNeuRoute
   '/demo/api/names': typeof DemoApiNamesRoute
   '/demo/api/tq-todos': typeof DemoApiTqTodosRoute
   '/demo/form/address': typeof DemoFormAddressRoute
@@ -160,12 +184,15 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_layout': typeof LayoutRouteWithChildren
-  '/_layout/aufgaben': typeof LayoutAufgabenRoute
+  '/_layout/aufgaben': typeof LayoutAufgabenRouteWithChildren
   '/_layout/dashboard': typeof LayoutDashboardRoute
   '/_layout/papierkorb': typeof LayoutPapierkorbRoute
   '/demo/store': typeof DemoStoreRoute
   '/demo/table': typeof DemoTableRoute
   '/demo/tanstack-query': typeof DemoTanstackQueryRoute
+  '/_layout/admin/nutzer': typeof LayoutAdminNutzerRoute
+  '/_layout/admin/projekt': typeof LayoutAdminProjektRoute
+  '/_layout/aufgaben/neu': typeof LayoutAufgabenNeuRoute
   '/demo/api/names': typeof DemoApiNamesRoute
   '/demo/api/tq-todos': typeof DemoApiTqTodosRoute
   '/demo/form/address': typeof DemoFormAddressRoute
@@ -187,6 +214,9 @@ export interface FileRouteTypes {
     | '/demo/store'
     | '/demo/table'
     | '/demo/tanstack-query'
+    | '/admin/nutzer'
+    | '/admin/projekt'
+    | '/aufgaben/neu'
     | '/demo/api/names'
     | '/demo/api/tq-todos'
     | '/demo/form/address'
@@ -206,6 +236,9 @@ export interface FileRouteTypes {
     | '/demo/store'
     | '/demo/table'
     | '/demo/tanstack-query'
+    | '/admin/nutzer'
+    | '/admin/projekt'
+    | '/aufgaben/neu'
     | '/demo/api/names'
     | '/demo/api/tq-todos'
     | '/demo/form/address'
@@ -226,6 +259,9 @@ export interface FileRouteTypes {
     | '/demo/store'
     | '/demo/table'
     | '/demo/tanstack-query'
+    | '/_layout/admin/nutzer'
+    | '/_layout/admin/projekt'
+    | '/_layout/aufgaben/neu'
     | '/demo/api/names'
     | '/demo/api/tq-todos'
     | '/demo/form/address'
@@ -356,6 +392,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DemoApiNamesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_layout/aufgaben/neu': {
+      id: '/_layout/aufgaben/neu'
+      path: '/neu'
+      fullPath: '/aufgaben/neu'
+      preLoaderRoute: typeof LayoutAufgabenNeuRouteImport
+      parentRoute: typeof LayoutAufgabenRoute
+    }
+    '/_layout/admin/projekt': {
+      id: '/_layout/admin/projekt'
+      path: '/admin/projekt'
+      fullPath: '/admin/projekt'
+      preLoaderRoute: typeof LayoutAdminProjektRouteImport
+      parentRoute: typeof LayoutRoute
+    }
+    '/_layout/admin/nutzer': {
+      id: '/_layout/admin/nutzer'
+      path: '/admin/nutzer'
+      fullPath: '/admin/nutzer'
+      preLoaderRoute: typeof LayoutAdminNutzerRouteImport
+      parentRoute: typeof LayoutRoute
+    }
     '/demo/start/ssr/': {
       id: '/demo/start/ssr/'
       path: '/demo/start/ssr'
@@ -387,16 +444,32 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface LayoutAufgabenRouteChildren {
+  LayoutAufgabenNeuRoute: typeof LayoutAufgabenNeuRoute
+}
+
+const LayoutAufgabenRouteChildren: LayoutAufgabenRouteChildren = {
+  LayoutAufgabenNeuRoute: LayoutAufgabenNeuRoute,
+}
+
+const LayoutAufgabenRouteWithChildren = LayoutAufgabenRoute._addFileChildren(
+  LayoutAufgabenRouteChildren,
+)
+
 interface LayoutRouteChildren {
-  LayoutAufgabenRoute: typeof LayoutAufgabenRoute
+  LayoutAufgabenRoute: typeof LayoutAufgabenRouteWithChildren
   LayoutDashboardRoute: typeof LayoutDashboardRoute
   LayoutPapierkorbRoute: typeof LayoutPapierkorbRoute
+  LayoutAdminNutzerRoute: typeof LayoutAdminNutzerRoute
+  LayoutAdminProjektRoute: typeof LayoutAdminProjektRoute
 }
 
 const LayoutRouteChildren: LayoutRouteChildren = {
-  LayoutAufgabenRoute: LayoutAufgabenRoute,
+  LayoutAufgabenRoute: LayoutAufgabenRouteWithChildren,
   LayoutDashboardRoute: LayoutDashboardRoute,
   LayoutPapierkorbRoute: LayoutPapierkorbRoute,
+  LayoutAdminNutzerRoute: LayoutAdminNutzerRoute,
+  LayoutAdminProjektRoute: LayoutAdminProjektRoute,
 }
 
 const LayoutRouteWithChildren =

@@ -91,14 +91,20 @@ function LayoutComponent() {
 
         {/* Verwaltungs-Buttons (nur für Admins - später implementiert) */}
         <div className="p-3 border-t border-gray-200 space-y-1">
-          <button className="flex items-center gap-3 px-3 py-2 rounded-md text-gray-700 hover:bg-gray-100 transition-colors w-full text-left text-sm">
+          <Link
+            to="/admin/nutzer"
+            className="flex items-center gap-3 px-3 py-2 rounded-md text-gray-700 hover:bg-gray-100 transition-colors w-full text-left text-sm [&.active]:bg-blue-500 [&.active]:text-white"
+          >
             <Users size={18} />
             <span>Nutzer verwalten</span>
-          </button>
-          <button className="flex items-center gap-3 px-3 py-2 rounded-md text-gray-700 hover:bg-gray-100 transition-colors w-full text-left text-sm">
+          </Link>
+          <Link
+            to="/admin/projekt"
+            className="flex items-center gap-3 px-3 py-2 rounded-md text-gray-700 hover:bg-gray-100 transition-colors w-full text-left text-sm [&.active]:bg-blue-500 [&.active]:text-white"
+          >
             <FolderKanban size={18} />
             <span>Projekt verwalten</span>
-          </button>
+          </Link>
         </div>
       </aside>
 
