@@ -1,5 +1,7 @@
-import { createFileRoute, Outlet, Link } from '@tanstack/react-router';
-import { LayoutDashboard, ListTodo, Trash2, Users, FolderKanban } from 'lucide-react';
+import { createFileRoute, Outlet, Link, useNavigate } from '@tanstack/react-router';
+import { LayoutDashboard, ListTodo, Trash2, Users, FolderKanban, LogOut, LogIn } from 'lucide-react';
+import { useState } from 'react';
+import { useAuth } from './__root';
 
 /**
  * Layout-Route (_layout.jsx)
@@ -40,6 +42,16 @@ export const Route = createFileRoute('/_layout')({
 });
 
 function LayoutComponent() {
+  const navigate = useNavigate();
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const { session, isAuthenticated, isAdmin, logout } = useAuth();
+
+  async function handleLogout() {
+    await logout();
+    setShowUserMenu(false);
+    navigate({ to: '/login' });
+  }
+
   return (
     <div className="flex h-screen bg-gray-100">
       {/* Sidebar - Linke Navigation */}
@@ -90,22 +102,24 @@ function LayoutComponent() {
         </nav>
 
         {/* Verwaltungs-Buttons (nur für Admins - später implementiert) */}
-        <div className="p-3 border-t border-gray-200 space-y-1">
-          <Link
-            to="/admin/nutzer"
-            className="flex items-center gap-3 px-3 py-2 rounded-md text-gray-700 hover:bg-gray-100 transition-colors w-full text-left text-sm [&.active]:bg-blue-500 [&.active]:text-white"
-          >
-            <Users size={18} />
-            <span>Nutzer verwalten</span>
-          </Link>
-          <Link
-            to="/admin/projekt"
-            className="flex items-center gap-3 px-3 py-2 rounded-md text-gray-700 hover:bg-gray-100 transition-colors w-full text-left text-sm [&.active]:bg-blue-500 [&.active]:text-white"
-          >
-            <FolderKanban size={18} />
-            <span>Projekt verwalten</span>
-          </Link>
-        </div>
+        {isAuthenticated && isAdmin && (
+          <div className="p-3 border-t border-gray-200 space-y-1">
+            <Link
+              to="/admin/nutzer"
+              className="flex items-center gap-3 px-3 py-2 rounded-md text-gray-700 hover:bg-gray-100 transition-colors w-full text-left text-sm [&.active]:bg-blue-500 [&.active]:text-white"
+            >
+              <Users size={18} />
+              <span>Nutzer verwalten</span>
+            </Link>
+            <Link
+              to="/admin/projekt"
+              className="flex items-center gap-3 px-3 py-2 rounded-md text-gray-700 hover:bg-gray-100 transition-colors w-full text-left text-sm [&.active]:bg-blue-500 [&.active]:text-white"
+            >
+              <FolderKanban size={18} />
+              <span>Projekt verwalten</span>
+            </Link>
+          </div>
+        )}
       </aside>
 
       {/* Main Content Area - Rechter Bereich */}
@@ -138,12 +152,53 @@ function LayoutComponent() {
                 </svg>
               </button>
               
-              {/* User Menu Button */}
-              <button className="flex items-center gap-2 p-1 hover:bg-gray-100 rounded-md transition-colors">
-                <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
-                  <span className="text-sm font-medium text-gray-600">U</span>
-                </div>
-              </button>
+              {/* User Menu Button - Dropdown mit Login/Logout */}
+              <div className="relative">
+                <button 
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  className="flex items-center gap-2 p-1 hover:bg-gray-100 rounded-md transition-colors"
+                >
+                  <div className="w-8 h-8 bg-linear-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white">
+                    <span className="text-sm font-medium">{session?.username ? session.username.charAt(0).toUpperCase() : 'U'}</span>
+                  </div>
+                </button>
+
+                {/* User Menu Dropdown */}
+                {showUserMenu && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                    {isAuthenticated ? (
+                      <>
+                        {/* User Info */}
+                        <div className="px-4 py-3 border-b border-gray-100">
+                          <p className="text-xs text-gray-500 uppercase font-semibold">Angemeldet als</p>
+                          <p className="font-medium text-gray-900">{session?.username}</p>
+                        </div>
+
+                        {/* Logout Button */}
+                        <button
+                          onClick={handleLogout}
+                          className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                        >
+                          <LogOut size={16} />
+                          Abmelden
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        {/* Login Button */}
+                        <Link
+                          to="/login"
+                          onClick={() => setShowUserMenu(false)}
+                          className="flex items-center gap-3 px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 transition-colors"
+                        >
+                          <LogIn size={16} />
+                          Anmelden
+                        </Link>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </header>

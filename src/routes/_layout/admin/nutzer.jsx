@@ -1,9 +1,39 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, redirect } from '@tanstack/react-router';
 import { UserPlus, Mail, Shield } from 'lucide-react';
+import { getSessionInfo } from '../../../server/auth-functions';
 
 /**
+ * Route-Schutz in TanStack Router - beforeLoad Guard
+ * ===================================================
+ * 
+ * Die beforeLoad-Funktion wird VOR dem Rendern der Komponente aufgerufen.
+ * Sie kann:
+ * 1. Daten vorausladen (Pre-fetching)
+ * 2. Authentifizierung/Autorisierung prüfen
+ * 3. Die Navigation blockieren oder umleiten
+ * 
+ * Wenn die Funktion einen Fehler wirft oder navigiert,
+ * wird die Komponente NICHT gerendert.
+ * 
+ * Warum beforeLoad und nicht direkt in der Komponente?
+ * -------------------------------------------------------
+ * 1. **Server-seitig erzwingbar**: Bei SSR kann beforeLoad auf dem Server
+ *    ausgeführt werden, BEVOR HTML gesendet wird
+ * 2. **Early Exit**: Navigation passiert vor Code-Splitting
+ * 3. **Konsistenz**: Schützt die Route unabhängig vom Client
+ * 4. **Performance**: Lädt geschützte Ressourcen nicht unnötig
+ * 
+ * Beispiel:
+ * ```
+ * beforeLoad: () => {
+ *   const session = await getSessionInfo()
+ *   if (!session?.authenticated || session.role !== 'admin') {
+ *     throw redirect({ to: '/login' })
+ *   }
+ * }
+ * ```
+ * 
  * Datei-basiertes Routing (Admin-Bereich)
- * --------------------------------------
  * Pfad der Datei: src/routes/_layout/admin/nutzer.jsx
  * Daraus wird automatisch die URL: /admin/nutzer
  * 
@@ -14,6 +44,28 @@ import { UserPlus, Mail, Shield } from 'lucide-react';
 
 export const Route = createFileRoute('/_layout/admin/nutzer')({
   component: AdminNutzerPage,
+  /**
+   * beforeLoad: Schutz-Gate vor dem Rendern
+   * 
+   * Diese Funktion wird aufgerufen, BEVOR die Komponente gerendert wird.
+   * Serverseitig: Session wird im Server Function geprüft.
+   */
+  beforeLoad: async () => {
+    const sessionId =
+      typeof document !== 'undefined'
+        ? document.cookie
+            .split(';')
+            .map((c) => c.trim())
+            .find((c) => c.startsWith('task_session='))
+            ?.split('=')[1] || null
+        : null;
+
+    const session = await getSessionInfo({ data: { sessionId } });
+
+    if (!session?.authenticated || session.role !== 'admin') {
+      throw redirect({ to: '/login' });
+    }
+  },
 });
 
 function AdminNutzerPage() {

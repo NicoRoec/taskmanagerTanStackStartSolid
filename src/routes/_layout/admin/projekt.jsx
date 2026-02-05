@@ -1,7 +1,22 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, redirect } from '@tanstack/react-router';
 import { FolderPlus, Settings, Archive } from 'lucide-react';
+import { getSessionInfo } from '../../../server/auth-functions';
 
 /**
+ * Route-Schutz in TanStack Router - beforeLoad Guard
+ * ===================================================
+ * 
+ * Die beforeLoad-Funktion wird VOR dem Rendern der Komponente aufgerufen.
+ * Sie kann:
+ * 1. Daten vorausladen (Pre-fetching)
+ * 2. Authentifizierung/Autorisierung prüfen
+ * 3. Die Navigation blockieren oder umleiten
+ * 
+ * Serverseite Durchsetzung:
+ * Bei Server-Side Rendering wird beforeLoad auf dem Server ausgeführt,
+ * BEVOR die Seite zum Client gesendet wird. Das verhindert, dass nicht
+ * autorisierte Benutzer den HTML-Code überhaupt sehen können.
+ * 
  * Nested Route im Admin-Bereich: /admin/projekt
  * -----------------------------------------------
  * Diese Datei liegt im admin-Ordner und erstellt eine weitere
@@ -19,6 +34,28 @@ import { FolderPlus, Settings, Archive } from 'lucide-react';
 
 export const Route = createFileRoute('/_layout/admin/projekt')({
   component: AdminProjektPage,
+  /**
+   * beforeLoad: Route-Schutz für Admin-Only Zugriff
+   * 
+   * Diese Funktion wird BEVOR die Komponente gerendert wird aufgerufen.
+   * Serverseitig wird die Session geprüft.
+   */
+  beforeLoad: async () => {
+    const sessionId =
+      typeof document !== 'undefined'
+        ? document.cookie
+            .split(';')
+            .map((c) => c.trim())
+            .find((c) => c.startsWith('task_session='))
+            ?.split('=')[1] || null
+        : null;
+
+    const session = await getSessionInfo({ data: { sessionId } });
+
+    if (!session?.authenticated || session.role !== 'admin') {
+      throw redirect({ to: '/login' });
+    }
+  },
 });
 
 function AdminProjektPage() {
