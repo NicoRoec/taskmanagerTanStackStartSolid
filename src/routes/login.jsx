@@ -98,10 +98,10 @@ function LoginPage() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-linear-to-br from-blue-50 to-blue-100">
+    <div className="flex items-center justify-center min-h-screen bg-linear-to-br from-blue-50 to-blue-100 dark:from-blue-50 dark:to-blue-100">
       <div className="w-full max-w-md">
         {/* Login Card */}
-        <div className="bg-white rounded-lg shadow-xl border border-blue-200 overflow-hidden">
+        <div className="bg-white dark:bg-white rounded-lg shadow-xl border border-blue-200 dark:border-blue-200 overflow-hidden">
           {/* Header */}
           <div className="bg-linear-to-r from-blue-600 to-blue-700 px-6 py-8">
             <h1 className="text-3xl font-bold text-white">Taskmanager</h1>
@@ -109,7 +109,7 @@ function LoginPage() {
           </div>
 
           {/* Form */}
-          <div className="p-6">
+          <div className="p-6 text-gray-900">
             {/* Error Message */}
             {error && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md flex gap-3">

@@ -500,7 +500,7 @@ function AufgabenPage() {
         accessorKey: 'title',
         header: 'Titel',
         cell: (info) => (
-          <span className="font-medium text-gray-900">{info.getValue()}</span>
+          <span className="font-medium text-gray-900 dark:text-gray-100">{info.getValue()}</span>
         ),
       },
       {
@@ -624,7 +624,7 @@ function AufgabenPage() {
       {/* Header Bereich */}
       <div className="mb-6">
         <div className="flex items-center gap-4 mb-4">
-          <h2 className="text-lg font-semibold text-gray-700">Aufgabenliste</h2>
+          <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200">Aufgabenliste</h2>
         </div>
         
         {/* Suchfeld - TanStack Search Integration */}
@@ -644,14 +644,14 @@ function AufgabenPage() {
             Ohne TanStack Search würde die Suche nur lokal sein (nicht in URL).
           */}
           <div className="relative">
-            <Search size={18} className="absolute left-3 top-2.5 text-gray-400" />
+            <Search size={18} className="absolute left-3 top-2.5 text-gray-400 dark:text-gray-500" />
             <input
               ref={searchInputRef}
               type="text"
               placeholder="Nach Aufgaben suchen..."
               defaultValue={search.q}
               onChange={(e) => handleSearchChange(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
         </div>
@@ -662,8 +662,8 @@ function AufgabenPage() {
             onClick={() => setSelectedTab('all')}
             className={`pb-1 ${
               selectedTab === 'all'
-                ? 'text-gray-900 font-medium border-b-2 border-gray-900'
-                : 'text-gray-500 hover:text-gray-900'
+                ? 'text-gray-900 dark:text-white font-medium border-b-2 border-gray-900 dark:border-white'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
             }`}
           >
             Alle Aufgaben
@@ -672,8 +672,8 @@ function AufgabenPage() {
             onClick={() => setSelectedTab('my')}
             className={`pb-1 ${
               selectedTab === 'my'
-                ? 'text-gray-900 font-medium border-b-2 border-gray-900'
-                : 'text-gray-500 hover:text-gray-900'
+                ? 'text-gray-900 dark:text-white font-medium border-b-2 border-gray-900 dark:border-white'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
             }`}
           >
             Meine Aufgaben
@@ -682,15 +682,15 @@ function AufgabenPage() {
       </div>
 
       {/* TanStack Table */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
         <table className="w-full">
-          <thead className="bg-gray-50 border-b border-gray-200">
+          <thead className="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
                   <th
                     key={header.id}
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
                     onClick={header.column.getToggleSortingHandler()}
                     style={{ width: header.getSize() }}
                   >
@@ -717,14 +717,14 @@ function AufgabenPage() {
               </tr>
             ))}
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
             {table.getRowModel().rows.map((row) => (
               <tr
                 key={row.id}
-                className="hover:bg-gray-50 transition-colors cursor-pointer"
+                className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer"
               >
                 {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                  <td key={cell.id} className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </td>
                 ))}
@@ -755,15 +755,15 @@ function AufgabenPage() {
       {isAdmin && isFormOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={() => setIsFormOpen(false)} />
-          <div className="relative bg-white w-full max-w-lg rounded-lg shadow-xl border border-gray-200 p-6">
+          <div className="relative bg-white dark:bg-gray-800 w-full max-w-lg rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
                 {editingTaskId ? 'Aufgabe bearbeiten' : 'Neue Aufgabe erstellen'}
               </h3>
               <button
                 type="button"
                 onClick={() => setIsFormOpen(false)}
-                className="p-1 text-gray-500 hover:text-gray-700"
+                className="p-1 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
                 aria-label="Schließen"
               >
                 <X size={18} />
@@ -786,18 +786,18 @@ function AufgabenPage() {
               >
                 {(field) => (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Titel
                     </label>
                     <input
                       type="text"
                       value={field.state.value}
                       onChange={(e) => field.handleChange(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="z.B. Mockup erstellen"
                     />
                     {field.state.meta.errors?.length ? (
-                      <p className="text-xs text-red-600 mt-1">
+                      <p className="text-xs text-red-600 dark:text-red-400 mt-1">
                         {field.state.meta.errors[0]}
                       </p>
                     ) : null}
@@ -809,13 +809,13 @@ function AufgabenPage() {
                 <form.Field name="status">
                   {(field) => (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                         Status
                       </label>
                       <select
                         value={field.state.value}
                         onChange={(e) => field.handleChange(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
                         <option value="Neu">Neu</option>
                         <option value="in Arbeit">in Arbeit</option>
@@ -828,13 +828,13 @@ function AufgabenPage() {
                 <form.Field name="priority">
                   {(field) => (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                         Priorität
                       </label>
                       <select
                         value={field.state.value}
                         onChange={(e) => field.handleChange(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
                         <option value="Niedrig">Niedrig</option>
                         <option value="Mittel">Mittel</option>
@@ -848,13 +848,13 @@ function AufgabenPage() {
               <form.Field name="assignee">
                 {(field) => (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Zugewiesen an
                     </label>
                     <select
                       value={field.state.value}
                       onChange={(e) => field.handleChange(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       {userOptions.map((user) => (
                         <option key={user} value={user}>
@@ -875,17 +875,17 @@ function AufgabenPage() {
               >
                 {(field) => (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Fällig am
                     </label>
                     <input
                       type="date"
                       value={field.state.value}
                       onChange={(e) => field.handleChange(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                     {field.state.meta.errors?.length ? (
-                      <p className="text-xs text-red-600 mt-1">
+                      <p className="text-xs text-red-600 dark:text-red-400 mt-1">
                         {field.state.meta.errors[0]}
                       </p>
                     ) : null}
@@ -897,7 +897,7 @@ function AufgabenPage() {
                 <button
                   type="button"
                   onClick={() => setIsFormOpen(false)}
-                  className="px-4 py-2 text-sm border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                  className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
                 >
                   Abbrechen
                 </button>

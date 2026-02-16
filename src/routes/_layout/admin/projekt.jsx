@@ -93,8 +93,8 @@ function AdminProjektPage() {
   return (
     <div>
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">Projekt verwalten</h2>
-        <p className="text-sm text-gray-600 mt-1">
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Projekt verwalten</h2>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
           Verwalte Projekte und deren Einstellungen
         </p>
       </div>
@@ -105,7 +105,7 @@ function AdminProjektPage() {
           <FolderPlus size={18} />
           <span>Neues Projekt</span>
         </button>
-        <button className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors text-sm">
+        <button className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm">
           <Archive size={18} />
           <span>Archivierte anzeigen</span>
         </button>
@@ -114,13 +114,13 @@ function AdminProjektPage() {
       {/* Projekt-Karten */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {projekte.map((projekt) => (
-          <div key={projekt.id} className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
+          <div key={projekt.id} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 hover:shadow-md transition-shadow">
             <div className="flex items-start justify-between mb-4">
               <div className="flex-1">
-                <h3 className="text-lg font-semibold text-gray-900 mb-1">{projekt.name}</h3>
-                <p className="text-sm text-gray-600">{projekt.beschreibung}</p>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">{projekt.name}</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">{projekt.beschreibung}</p>
               </div>
-              <button className="p-2 hover:bg-gray-100 rounded-md transition-colors">
+              <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors">
                 <Settings size={18} className="text-gray-400" />
               </button>
             </div>
@@ -129,25 +129,25 @@ function AdminProjektPage() {
             <div className="mb-4">
               <span className={`inline-flex px-3 py-1 text-xs font-medium rounded-full ${
                 projekt.status === 'Aktiv' 
-                  ? 'bg-green-100 text-green-800' 
-                  : 'bg-yellow-100 text-yellow-800'
+                  ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200' 
+                  : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200'
               }`}>
                 {projekt.status}
               </span>
             </div>
 
             {/* Statistiken */}
-            <div className="grid grid-cols-3 gap-4 pt-4 border-t border-gray-200">
+            <div className="grid grid-cols-3 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
               <div>
-                <p className="text-xs text-gray-500 mb-1">Aufgaben</p>
-                <p className="text-lg font-semibold text-gray-900">{projekt.aufgaben}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Aufgaben</p>
+                <p className="text-lg font-semibold text-gray-900 dark:text-white">{projekt.aufgaben}</p>
               </div>
               <div>
-                <p className="text-xs text-gray-500 mb-1">Mitglieder</p>
-                <p className="text-lg font-semibold text-gray-900">{projekt.mitglieder}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Mitglieder</p>
+                <p className="text-lg font-semibold text-gray-900 dark:text-white">{projekt.mitglieder}</p>
               </div>
               <div>
-                <p className="text-xs text-gray-500 mb-1">Erstellt</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Erstellt</p>
                 <p className="text-sm text-gray-600">{projekt.erstellt}</p>
               </div>
             </div>

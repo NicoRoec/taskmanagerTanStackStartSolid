@@ -371,14 +371,14 @@ function PapierkorbPage() {
     <div className="h-full">
       {/* Header */}
       <div className="mb-6">
-        <h2 className="text-lg font-semibold text-gray-700">Papierkorb</h2>
-        <p className="text-sm text-gray-600 mt-1">Gelöschte Aufgaben können wiederhergestellt oder endgültig gelöscht werden</p>
+        <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200">Papierkorb</h2>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Gelöschte Aufgaben können wiederhergestellt oder endgültig gelöscht werden</p>
       </div>
 
       {/* Info-Banner */}
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-6 flex gap-3">
-        <AlertCircle size={18} className="text-amber-600 shrink-0 mt-0.5" />
-        <div className="text-sm text-amber-800">
+      <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 mb-6 flex gap-3">
+        <AlertCircle size={18} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+        <div className="text-sm text-amber-800 dark:text-amber-200">
           <strong>Soft Delete erklärt:</strong> Gelöschte Aufgaben sind hier noch sichtbar und können wiederhergestellt werden.
           Nur Admins können Sie endgültig löschen (hart delete).
         </div>
@@ -386,21 +386,21 @@ function PapierkorbPage() {
 
       {/* Trash Table */}
       {tasks.length === 0 ? (
-        <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-12 text-center">
           <Trash2 size={48} className="mx-auto mb-4 text-gray-400" />
-          <p className="font-medium text-gray-900">Papierkorb ist leer</p>
-          <p className="text-sm text-gray-600 mt-2">Gelöschte Aufgaben werden hier angezeigt</p>
+          <p className="font-medium text-gray-900 dark:text-white">Papierkorb ist leer</p>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">Gelöschte Aufgaben werden hier angezeigt</p>
         </div>
       ) : (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
           <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
+            <thead className="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id}>
                   {headerGroup.headers.map((header) => (
                     <th
                       key={header.id}
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
                       onClick={header.column.getToggleSortingHandler()}
                       style={{ width: header.getSize() }}
                     >
@@ -427,14 +427,14 @@ function PapierkorbPage() {
                 </tr>
               ))}
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {table.getRowModel().rows.map((row) => (
                 <tr
                   key={row.id}
-                  className="hover:bg-gray-50 transition-colors"
+                  className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                 >
                   {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                    <td key={cell.id} className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
                   ))}
@@ -446,7 +446,7 @@ function PapierkorbPage() {
       )}
 
       {/* Info-Text */}
-      <div className="mt-4 text-sm text-gray-600">
+      <div className="mt-4 text-sm text-gray-600 dark:text-gray-400">
         {tasks.length} gelöschte Aufgabe(n)
       </div>
 
@@ -454,19 +454,19 @@ function PapierkorbPage() {
       {isAdmin && showConfirmPermanent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={cancelPermanentDelete} />
-          <div className="relative bg-white w-full max-w-md rounded-lg shadow-xl border border-gray-200 p-6">
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded flex gap-3">
-              <AlertCircle className="text-red-600 shrink-0 mt-0.5" size={18} />
-              <div className="text-sm text-red-800">
+          <div className="relative bg-white dark:bg-gray-800 w-full max-w-md rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 p-6">
+            <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded flex gap-3">
+              <AlertCircle className="text-red-600 dark:text-red-400 shrink-0 mt-0.5" size={18} />
+              <div className="text-sm text-red-800 dark:text-red-200">
                 <strong>Warnung!</strong> Diese Aktion kann <strong>nicht</strong> rückgängig gemacht werden.
               </div>
             </div>
 
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
               Aufgabe endgültig löschen?
             </h3>
 
-            <p className="text-sm text-gray-600 mb-6">
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
               Die Aufgabe wird unwiderruflich aus der Datenbank entfernt. Sie können Sie später nicht mehr wiederherstellen.
             </p>
 
@@ -474,7 +474,7 @@ function PapierkorbPage() {
               <button
                 type="button"
                 onClick={cancelPermanentDelete}
-                className="px-4 py-2 text-sm border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
               >
                 Abbrechen
               </button>

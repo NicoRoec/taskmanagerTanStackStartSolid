@@ -1,7 +1,8 @@
 import { createFileRoute, Outlet, Link, useNavigate } from '@tanstack/react-router';
-import { LayoutDashboard, ListTodo, Trash2, Users, FolderKanban, LogOut, LogIn } from 'lucide-react';
+import { LayoutDashboard, ListTodo, Trash2, Users, FolderKanban, LogOut, LogIn, Moon, Sun } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from './__root';
+import { useTheme } from './__root';
 
 /**
  * Layout-Route (_layout.jsx)
@@ -45,6 +46,7 @@ function LayoutComponent() {
   const navigate = useNavigate();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const { session, isAuthenticated, isAdmin, logout } = useAuth();
+  const { isDarkMode, toggleTheme } = useTheme();
 
   async function handleLogout() {
     await logout();
@@ -53,23 +55,49 @@ function LayoutComponent() {
   }
 
   return (
-    <div className="flex h-screen bg-gray-100 flex-col">
+    <div className="flex h-screen bg-gray-100 dark:bg-gray-900 flex-col">
       {/* Header über die komplette Breite */}
-      <header className="bg-white border-b border-gray-200 px-6 py-3">
+      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-3">
         <div className="flex items-center justify-between">
           {/* Linker Bereich: App-Titel (gleichbreit wie Sidebar) */}
           <div className="w-56">
-            <h1 className="text-lg font-semibold text-gray-800">Taskmanager</h1>
+            <h1 className="text-lg font-semibold text-gray-800 dark:text-white">Taskmanager</h1>
           </div>
 
           {/* User Menu Bereich */}
           <div className="flex-1 flex items-center justify-end">
             <div className="flex items-center gap-3">
+              {/* Dark Mode Toggle Button */}
+              {/*
+                Dark Mode Toggle
+                -----------------
+                TanStack Store reagiert auf Button-Klicks und aktualisiert:
+                1. themeStore.state.darkMode
+                2. localStorage speichert Präferenz
+                3. HTML Element erhält oder verliert 'dark' Klasse
+                4. Alle Tailwind dark: Klassen werden aktiviert/deaktiviert
+                
+                Icons:
+                - Moon = Dark Mode aktiv (zeigt dass man zu Light Mode switchenkan)
+                - Sun = Light Mode aktiv (zeigt dass man zu Dark Mode switchenkan)
+              */}
+              <button
+                onClick={toggleTheme}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
+                title={isDarkMode ? 'Zum Light Mode' : 'Zum Dark Mode'}
+                aria-label="Theme wechseln"
+              >
+                {isDarkMode ? (
+                  <Sun size={18} className="text-yellow-500" />
+                ) : (
+                  <Moon size={18} className="text-gray-600" />
+                )}
+              </button>
               {/* User Menu Button - Dropdown mit Login/Logout */}
               <div className="relative">
                 <button 
                   onClick={() => setShowUserMenu(!showUserMenu)}
-                  className="flex items-center gap-2 p-1 hover:bg-gray-100 rounded-md transition-colors"
+                  className="flex items-center gap-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
                 >
                   <div className="w-8 h-8 bg-linear-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white">
                     <span className="text-sm font-medium">{session?.username ? session.username.charAt(0).toUpperCase() : 'U'}</span>
@@ -78,19 +106,19 @@ function LayoutComponent() {
 
                 {/* User Menu Dropdown */}
                 {showUserMenu && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                  <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-50">
                     {isAuthenticated ? (
                       <>
                         {/* User Info */}
-                        <div className="px-4 py-3 border-b border-gray-100">
-                          <p className="text-xs text-gray-500 uppercase font-semibold">Angemeldet als</p>
-                          <p className="font-medium text-gray-900">{session?.username}</p>
+                        <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-600">
+                          <p className="text-xs text-gray-500 dark:text-gray-400 uppercase font-semibold">Angemeldet als</p>
+                          <p className="font-medium text-gray-900 dark:text-white">{session?.username}</p>
                         </div>
 
                         {/* Logout Button */}
                         <button
                           onClick={handleLogout}
-                          className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                          className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
                         >
                           <LogOut size={16} />
                           Abmelden
@@ -102,7 +130,7 @@ function LayoutComponent() {
                         <Link
                           to="/login"
                           onClick={() => setShowUserMenu(false)}
-                          className="flex items-center gap-3 px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 transition-colors"
+                          className="flex items-center gap-3 px-4 py-2 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
                         >
                           <LogIn size={16} />
                           Anmelden
@@ -120,14 +148,14 @@ function LayoutComponent() {
       {/* Body: Sidebar + Content */}
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar - Linke Navigation */}
-        <aside className="w-56 bg-white border-r border-gray-200 flex flex-col">
+        <aside className="w-56 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">
           {/* Haupt-Navigation */}
           <nav className="flex-1 p-3">
           <ul className="space-y-1">
             <li>
               <Link
                 to="/dashboard"
-                className="flex items-center gap-3 px-3 py-2 rounded-md text-gray-700 hover:bg-gray-100 transition-colors [&.active]:bg-blue-500 [&.active]:text-white"
+                className="flex items-center gap-3 px-3 py-2 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors [&.active]:bg-blue-500 [&.active]:text-white"
               >
                 <LayoutDashboard size={18} />
                 <span className="text-sm">Dashboard</span>
@@ -136,7 +164,7 @@ function LayoutComponent() {
             <li>
               <Link
                 to="/aufgaben"
-                className="flex items-center gap-3 px-3 py-2 rounded-md text-gray-700 hover:bg-gray-100 transition-colors [&.active]:bg-blue-500 [&.active]:text-white"
+                className="flex items-center gap-3 px-3 py-2 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors [&.active]:bg-blue-500 [&.active]:text-white"
               >
                 <ListTodo size={18} />
                 <span className="text-sm">Aufgaben</span>
@@ -145,7 +173,7 @@ function LayoutComponent() {
             <li>
               <Link
                 to="/papierkorb"
-                className="flex items-center gap-3 px-3 py-2 rounded-md text-gray-700 hover:bg-gray-100 transition-colors [&.active]:bg-blue-500 [&.active]:text-white"
+                className="flex items-center gap-3 px-3 py-2 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors [&.active]:bg-blue-500 [&.active]:text-white"
               >
                 <Trash2 size={18} />
                 <span className="text-sm">Papierkorb</span>
@@ -156,17 +184,17 @@ function LayoutComponent() {
 
         {/* Verwaltungs-Buttons (nur für Admins - später implementiert) */}
         {isAuthenticated && isAdmin && (
-          <div className="p-3 border-t border-gray-200 space-y-1">
+          <div className="p-3 border-t border-gray-200 dark:border-gray-700 space-y-1">
             <Link
               to="/admin/nutzer"
-              className="flex items-center gap-3 px-3 py-2 rounded-md text-gray-700 hover:bg-gray-100 transition-colors w-full text-left text-sm [&.active]:bg-blue-500 [&.active]:text-white"
+              className="flex items-center gap-3 px-3 py-2 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors w-full text-left text-sm [&.active]:bg-blue-500 [&.active]:text-white"
             >
               <Users size={18} />
               <span>Nutzer verwalten</span>
             </Link>
             <Link
               to="/admin/projekt"
-              className="flex items-center gap-3 px-3 py-2 rounded-md text-gray-700 hover:bg-gray-100 transition-colors w-full text-left text-sm [&.active]:bg-blue-500 [&.active]:text-white"
+              className="flex items-center gap-3 px-3 py-2 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors w-full text-left text-sm [&.active]:bg-blue-500 [&.active]:text-white"
             >
               <FolderKanban size={18} />
               <span>Projekt verwalten</span>
@@ -176,7 +204,7 @@ function LayoutComponent() {
       </aside>
 
         {/* Main Content Area - Rechter Bereich */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-gray-50">
+        <div className="flex-1 flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-900">
           {/* Main Content - Hier werden die Kind-Routen gerendert */}
           <main className="flex-1 overflow-auto p-6">
           {/* 

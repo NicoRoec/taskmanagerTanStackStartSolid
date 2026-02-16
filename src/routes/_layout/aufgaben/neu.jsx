@@ -25,13 +25,13 @@ function AufgabeNeuPage() {
     <div>
       {/* Header mit Navigation */}
       <div className="mb-6">
-        <h2 className="text-lg font-semibold text-gray-700 mb-4">Task erstellen</h2>
+        <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-4">Task erstellen</h2>
         
         {/* Navigation zwischen Task-Liste und Task-Erstellung */}
         <div className="flex items-center gap-2">
           <Link
             to="/aufgaben"
-            className="px-3 py-1.5 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
+            className="px-3 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
           >
             Task-Liste
           </Link>
@@ -45,23 +45,23 @@ function AufgabeNeuPage() {
       </div>
 
       {/* Formular für neue Aufgabe */}
-      <div className="bg-white border border-gray-200 rounded-lg p-6 max-w-2xl">
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 max-w-2xl">
         <div className="space-y-4">
           {/* Mockup erstellen - Titel Input */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Mockup erstellen</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Mockup erstellen</label>
             <input 
               type="text" 
               placeholder="Hier die Beschreibung, man muss ein Mockup der Webpage erstellen, sodass wir alle die gleiche Vorstellung der Anforderung haben."
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
           
           {/* Prio, Mittel - Dropdown */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Prio: Mittel</label>
-              <select className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Prio: Mittel</label>
+              <select className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
                 <option>Mittel</option>
                 <option>Hoch</option>
                 <option>Niedrig</option>
@@ -70,8 +70,8 @@ function AufgabeNeuPage() {
             
             {/* Status: In Arbeit */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Status: In Arbeit</label>
-              <select className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Status: In Arbeit</label>
+              <select className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
                 <option>In Arbeit</option>
                 <option>Neu</option>
                 <option>Erledigt</option>
@@ -80,22 +80,22 @@ function AufgabeNeuPage() {
             
             {/* Zugewiesen an */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Zugewiesen an:</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Zugewiesen an:</label>
               <input 
                 type="text" 
                 placeholder="Max Mustermann"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </div>
           
           {/* Fällig am */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Fällig am: 31.03.2026</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Fällig am: 31.03.2026</label>
             <input 
               type="date" 
               defaultValue="2026-03-31"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
           
@@ -106,7 +106,7 @@ function AufgabeNeuPage() {
             </button>
             <Link
               to="/aufgaben"
-              className="px-6 py-2 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors inline-block"
+              className="px-6 py-2 text-sm rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors inline-block"
             >
               Abbrechen
             </Link>

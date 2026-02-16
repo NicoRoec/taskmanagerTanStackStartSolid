@@ -6,11 +6,18 @@ import {
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { TanStackDevtools } from "@tanstack/react-devtools";
 import { createContext, useContext, useState, useEffect } from "react";
+import { useStore } from "@tanstack/react-store";
 
 import TanStackQueryDevtools from "../integrations/tanstack-query/devtools";
 import * as TanstackQuery from "../integrations/tanstack-query/root-provider";
 
 import StoreDevtools from "../lib/demo-store-devtools";
+import { 
+  themeStore, 
+  initializeThemeStore, 
+  toggleDarkMode,
+  watchSystemThemePreference
+} from "../lib/theme-store";
 
 import appCss from "../styles.css?url";
 
@@ -30,6 +37,34 @@ import { getSessionInfo, logoutUser } from "../server/auth-functions";
  * - Bedingte Rendering von Admin-Funktionen
  * - Route-Guards in TanStack Router
  */
+
+/**
+ * Theme-Hook für Dark Mode
+ * ========================
+ * 
+ * Erlaubt alle Komponenten, den aktuellen Theme-Status zu lesen
+ * und zwischen Light/Dark Mode umzuschalten.
+ * 
+ * Verwendung in Komponenten:
+ * -------------------------
+ * const { isDarkMode, toggleTheme } = useTheme()
+ * 
+ * // Liest aktuellen Dark Mode Status
+ * console.log(isDarkMode)
+ * 
+ * // Toggelt Dark Mode an/aus
+ * onClick={() => toggleTheme()}
+ */
+export function useTheme() {
+  const isDarkMode = useStore(themeStore, (state) => state.darkMode)
+
+  return {
+    isDarkMode,
+    toggleTheme: toggleDarkMode,
+  }
+}
+
+
 export interface AuthContextType {
   session: {
     sessionId: string;
@@ -193,9 +228,15 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
 
 function RootDocument({ children }: { children: React.ReactNode }) {
   const { queryClient } = Route.useRouteContext();
+  const { isDarkMode } = useTheme();
+
+  useEffect(() => {
+    initializeThemeStore();
+    watchSystemThemePreference();
+  }, []);
 
   return (
-    <html lang="en">
+    <html lang="en" className={isDarkMode ? 'dark' : ''}>
       <head>
         <HeadContent />
       </head>

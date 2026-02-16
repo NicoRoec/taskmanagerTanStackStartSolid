@@ -104,8 +104,8 @@ function AdminNutzerPage() {
   return (
     <div>
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">Nutzer verwalten</h2>
-        <p className="text-sm text-gray-600 mt-1">
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Nutzer verwalten</h2>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
           Verwalte Benutzer und deren Berechtigungen
         </p>
       </div>
@@ -116,16 +116,16 @@ function AdminNutzerPage() {
           <UserPlus size={18} />
           <span>Nutzer hinzufügen</span>
         </button>
-        <button className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors text-sm">
+        <button className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm">
           <Mail size={18} />
           <span>Einladung senden</span>
         </button>
       </div>
 
       {/* Nutzer-Tabelle */}
-      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
         {/* Tabellen-Header */}
-        <div className="grid grid-cols-12 gap-4 px-6 py-3 bg-gray-50 border-b border-gray-200 text-sm font-medium text-gray-600">
+        <div className="grid grid-cols-12 gap-4 px-6 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 text-sm font-medium text-gray-600 dark:text-gray-300">
           <div className="col-span-4">Nutzer</div>
           <div className="col-span-2">Aufgaben</div>
           <div className="col-span-2">Rolle</div>
@@ -134,36 +134,36 @@ function AdminNutzerPage() {
         </div>
         
         {/* Tabellen-Zeilen */}
-        <div className="divide-y divide-gray-200">
+        <div className="divide-y divide-gray-200 dark:divide-gray-700">
           {nutzer.map((user) => (
-            <div key={user.id} className="grid grid-cols-12 gap-4 px-6 py-4 items-center hover:bg-gray-50 transition-colors">
+            <div key={user.id} className="grid grid-cols-12 gap-4 px-6 py-4 items-center hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
               <div className="col-span-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
-                    <span className="text-sm font-medium text-gray-600">
+                  <div className="w-10 h-10 bg-gray-200 dark:bg-gray-600 rounded-full flex items-center justify-center">
+                    <span className="text-sm font-medium text-gray-600 dark:text-gray-200">
                       {user.name.split(' ').map(n => n[0]).join('')}
                     </span>
                   </div>
                   <div>
-                    <p className="font-medium text-gray-900">{user.name}</p>
-                    <p className="text-sm text-gray-500">user{user.id}@example.com</p>
+                    <p className="font-medium text-gray-900 dark:text-white">{user.name}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">user{user.id}@example.com</p>
                   </div>
                 </div>
               </div>
-              <div className="col-span-2 text-gray-700">{user.aufgaben}</div>
+              <div className="col-span-2 text-gray-700 dark:text-gray-300">{user.aufgaben}</div>
               <div className="col-span-2">
                 <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full ${
                   user.rolle === 'Admin' 
-                    ? 'bg-purple-100 text-purple-800' 
-                    : 'bg-gray-100 text-gray-800'
+                    ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-200' 
+                    : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
                 }`}>
                   {user.rolle === 'Admin' && <Shield size={12} />}
                   {user.rolle}
                 </span>
               </div>
-              <div className="col-span-3 text-gray-600 text-sm">{user.zuletztAktiv}</div>
+              <div className="col-span-3 text-gray-600 dark:text-gray-400 text-sm">{user.zuletztAktiv}</div>
               <div className="col-span-1 text-right">
-                <button className="text-gray-400 hover:text-gray-600">
+                <button className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                   <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
                     <circle cx="10" cy="5" r="1.5" />
                     <circle cx="10" cy="10" r="1.5" />

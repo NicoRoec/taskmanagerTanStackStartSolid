@@ -20,7 +20,7 @@ const config = defineConfig({
     },
   },
   plugins: [
-    devtools({ eventBusConfig: { port: 42070 } }),
+    devtools({ eventBusConfig: { port: 42071 } }),
     nitro(),
     // this is the plugin that enables path aliases
     viteTsConfigPaths({
