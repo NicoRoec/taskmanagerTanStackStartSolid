@@ -59,7 +59,7 @@ export const getTasksForList = createServerFn({ method: 'POST' })
     if (session.role === 'admin') {
       return all(
         db,
-        `SELECT id, title, status, priority, due_date AS dueDate, owner_id, owner_id AS assignee
+        `SELECT id, title, status, priority, due_date AS dueDate, owner_id, assigned_to AS assignee
          FROM tasks
          WHERE is_deleted = 0
          ORDER BY id ASC`
@@ -71,7 +71,7 @@ export const getTasksForList = createServerFn({ method: 'POST' })
       // "Meine Aufgaben" - nur die des aktuellen Users
       return all(
         db,
-        `SELECT id, title, status, priority, due_date AS dueDate, owner_id, owner_id AS assignee
+        `SELECT id, title, status, priority, due_date AS dueDate, owner_id, assigned_to AS assignee
          FROM tasks
          WHERE is_deleted = 0 AND owner_id = ?
          ORDER BY id ASC`,
@@ -82,7 +82,7 @@ export const getTasksForList = createServerFn({ method: 'POST' })
     // Default: "all" - alle Tasks fuer alle User
     return all(
       db,
-      `SELECT id, title, status, priority, due_date AS dueDate, owner_id, owner_id AS assignee
+      `SELECT id, title, status, priority, due_date AS dueDate, owner_id, assigned_to AS assignee
        FROM tasks
        WHERE is_deleted = 0
        ORDER BY id ASC`
@@ -94,10 +94,11 @@ export const getTasksForList = createServerFn({ method: 'POST' })
  * 
  * TanStack Server Function Boundary:
  * ==================================
- * - Client sendet: { sessionId, title, status, priority, dueDate }
+ * - Client sendet: { sessionId, title, status, priority, dueDate, assignedTo }
  * - Diese Funktion laeuft NUR auf dem Server
  * - SQL-Query ist unsichtbar fuer den Client
  * - owner_id wird automatisch aus der Session gesetzt (User kann nicht manipulieren!)
+ * - assigned_to wird vom Client gesetzt (wem die Task zugewiesen ist)
  * 
  * Autorisierung (Enforcement Point):
  * ==================================
@@ -117,7 +118,7 @@ export const createTask = createServerFn({ method: 'POST' })
     }
 
     // ===== EINGABE-VALIDIERUNG =====
-    const { title, status, priority, dueDate } = data;
+    const { title, status, priority, dueDate, assignedTo } = data;
 
     if (!title || !title.trim()) {
       return { success: false, error: 'Titel ist erforderlich' };
@@ -141,14 +142,15 @@ export const createTask = createServerFn({ method: 'POST' })
     try {
       const result = await run(
         db,
-        `INSERT INTO tasks (title, status, priority, due_date, owner_id, is_deleted, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 0, datetime('now'), datetime('now'))`,
+        `INSERT INTO tasks (title, status, priority, due_date, owner_id, assigned_to, is_deleted, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, 0, datetime('now'), datetime('now'))`,
         [
           title.trim(),
           status,
           priority,
           dueDate,
           Number(session.userId), // ===== KRITISCH: owner_id kommt aus Session, nicht vom Client! =====
+          assignedTo || 'Admin', // assigned_to Wert vom Client (default: Admin)
         ]
       );
 
@@ -197,7 +199,7 @@ export const updateTask = createServerFn({ method: 'POST' })
     }
 
     // ===== EINGABE-VALIDIERUNG =====
-    const { taskId, title, status, priority, dueDate } = data;
+    const { taskId, title, status, priority, dueDate, assignedTo } = data;
 
     if (!taskId) {
       return { success: false, error: 'Task-ID ist erforderlich' };
@@ -269,13 +271,14 @@ export const updateTask = createServerFn({ method: 'POST' })
       await run(
         db,
         `UPDATE tasks
-         SET title = ?, status = ?, priority = ?, due_date = ?, updated_at = datetime('now')
+         SET title = ?, status = ?, priority = ?, due_date = ?, assigned_to = ?, updated_at = datetime('now')
          WHERE id = ?`,
         [
           title.trim(),
           status,
           priority,
           dueDate,
+          data.assignedTo || 'Admin', // assigned_to aktualisierbar durch Admin
           Number(taskId),
         ]
       );
@@ -407,7 +410,7 @@ export const getTasksForTrash = createServerFn({ method: 'POST' })
     if (session.role === 'admin') {
       return all(
         db,
-        `SELECT id, title, status, priority, due_date AS dueDate, owner_id AS ownerId, updated_at
+        `SELECT id, title, status, priority, due_date AS dueDate, owner_id AS ownerId, assigned_to AS assignee, updated_at
          FROM tasks
          WHERE is_deleted = 1
          ORDER BY updated_at DESC`
@@ -417,7 +420,7 @@ export const getTasksForTrash = createServerFn({ method: 'POST' })
     // User sieht nur ihre eigenen geloesch Tasks
     return all(
       db,
-      `SELECT id, title, status, priority, due_date AS dueDate, owner_id AS ownerId, updated_at
+      `SELECT id, title, status, priority, due_date AS dueDate, owner_id AS ownerId, assigned_to AS assignee, updated_at
        FROM tasks
        WHERE is_deleted = 1 AND owner_id = ?
        ORDER BY updated_at DESC`,

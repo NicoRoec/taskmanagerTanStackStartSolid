@@ -68,6 +68,7 @@ async function initSchema(db) {
       priority TEXT NOT NULL,
       due_date TEXT NOT NULL,
       owner_id INTEGER NOT NULL,
+      assigned_to TEXT,
       is_deleted INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -75,35 +76,46 @@ async function initSchema(db) {
   );
 }
 
+async function migrateAddAssignedTo(db) {
+  // Pruefe, ob assigned_to Spalte bereits existiert
+  const tableInfo = await all(db, `PRAGMA table_info(tasks)`);
+  const hasAssignedTo = tableInfo.some(col => col.name === 'assigned_to');
+  
+  if (!hasAssignedTo) {
+    console.log('Migriere: Füge assigned_to Spalte hinzu');
+    await run(db, `ALTER TABLE tasks ADD COLUMN assigned_to TEXT`);
+  }
+}
+
 async function seedTasksIfEmpty(db) {
   const countRow = await get(db, 'SELECT COUNT(*) as count FROM tasks');
   if (countRow && countRow.count > 0) return;
 
-  // Beispiel-Daten wie zuvor (owner_id ist hier nur Demo: 1=admin, 2=user)
+  // Beispiel-Daten: owner_id = Ersteller, assigned_to = Zuständiger
   await run(
     db,
-    'INSERT INTO tasks (title, status, priority, due_date, owner_id) VALUES (?, ?, ?, ?, ?)',
-    ['Mockup erstellen', 'in Arbeit', 'Mittel', '2026-03-31', 2]
+    'INSERT INTO tasks (title, status, priority, due_date, owner_id, assigned_to) VALUES (?, ?, ?, ?, ?, ?)',
+    ['Mockup erstellen', 'in Arbeit', 'Mittel', '2026-03-31', 2, 'Nutzer123']
   );
   await run(
     db,
-    'INSERT INTO tasks (title, status, priority, due_date, owner_id) VALUES (?, ?, ?, ?, ?)',
-    ['Abgabe', 'Neu', 'Hoch', '2026-04-10', 2]
+    'INSERT INTO tasks (title, status, priority, due_date, owner_id, assigned_to) VALUES (?, ?, ?, ?, ?, ?)',
+    ['Abgabe', 'Neu', 'Hoch', '2026-04-10', 2, 'Max Mustermann']
   );
   await run(
     db,
-    'INSERT INTO tasks (title, status, priority, due_date, owner_id) VALUES (?, ?, ?, ?, ?)',
-    ['Code Review', 'Erledigt', 'Niedrig', '2026-02-15', 1]
+    'INSERT INTO tasks (title, status, priority, due_date, owner_id, assigned_to) VALUES (?, ?, ?, ?, ?, ?)',
+    ['Code Review', 'Erledigt', 'Niedrig', '2026-02-15', 1, 'Admin']
   );
   await run(
     db,
-    'INSERT INTO tasks (title, status, priority, due_date, owner_id) VALUES (?, ?, ?, ?, ?)',
-    ['Testing durchfuehren', 'in Arbeit', 'Hoch', '2026-03-20', 1]
+    'INSERT INTO tasks (title, status, priority, due_date, owner_id, assigned_to) VALUES (?, ?, ?, ?, ?, ?)',
+    ['Testing durchfuehren', 'in Arbeit', 'Hoch', '2026-03-20', 1, 'Erika Musterfrau']
   );
   await run(
     db,
-    'INSERT INTO tasks (title, status, priority, due_date, owner_id) VALUES (?, ?, ?, ?, ?)',
-    ['Dokumentation schreiben', 'Neu', 'Mittel', '2026-03-25', 2]
+    'INSERT INTO tasks (title, status, priority, due_date, owner_id, assigned_to) VALUES (?, ?, ?, ?, ?, ?)',
+    ['Dokumentation schreiben', 'Neu', 'Mittel', '2026-03-25', 2, 'Jon Doe']
   );
 }
 
@@ -113,6 +125,7 @@ export async function getDb() {
       await mkdir(join(__dirname, '..', '..', 'data'), { recursive: true });
       const db = await openDb();
       await initSchema(db);
+      await migrateAddAssignedTo(db);
       await seedTasksIfEmpty(db);
       return db;
     })();

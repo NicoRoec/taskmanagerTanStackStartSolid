@@ -244,6 +244,7 @@ function AufgabenPage() {
               status: value.status,
               priority: value.priority,
               dueDate: value.dueDate, // ISO-Format (YYYY-MM-DD) vom input type=date
+              assignedTo: value.assignee, // Zugewiesen an
             },
           });
 
@@ -262,6 +263,7 @@ function AufgabenPage() {
                     status: value.status,
                     priority: value.priority,
                     dueDate: formatDateForDisplay(value.dueDate),
+                    assignee: value.assignee, // Zugewiesen an aktualisieren
                   }
                 : task
             )
@@ -277,6 +279,7 @@ function AufgabenPage() {
               status: value.status,
               priority: value.priority,
               dueDate: value.dueDate, // ISO-Format (YYYY-MM-DD) vom input type=date
+              assignedTo: value.assignee, // Zugewiesen an
             },
           });
 
@@ -294,7 +297,8 @@ function AufgabenPage() {
               status: value.status,
               priority: value.priority,
               dueDate: formatDateForDisplay(value.dueDate),
-              assignee: normalizeAssignee(session.userId),
+              assignee: value.assignee, // Zugewiesen an
+              owner_id: session.userId, // Ersteller ist aktueller User
             },
           ]);
         }
