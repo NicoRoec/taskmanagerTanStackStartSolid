@@ -8,6 +8,7 @@ import { TanStackDevtools } from "@tanstack/react-devtools";
 import { createContext, useContext, useState, useEffect } from "react";
 
 import TanStackQueryDevtools from "../integrations/tanstack-query/devtools";
+import * as TanstackQuery from "../integrations/tanstack-query/root-provider";
 
 import StoreDevtools from "../lib/demo-store-devtools";
 
@@ -191,13 +192,24 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
 }
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+  const { queryClient } = Route.useRouteContext();
+
   return (
     <html lang="en">
       <head>
         <HeadContent />
       </head>
       <body>
-        <AuthProvider>{children}</AuthProvider>
+        {/*
+          TanStack Query Provider
+          =======================
+          Der Provider stellt den QueryClient im React-Context bereit.
+          Ohne ihn koennen useQuery/useMutation nicht arbeiten und
+          liefern keine Daten.
+        */}
+        <TanstackQuery.Provider queryClient={queryClient}>
+          <AuthProvider>{children}</AuthProvider>
+        </TanstackQuery.Provider>
         <TanStackDevtools
           config={{
             position: "bottom-right",

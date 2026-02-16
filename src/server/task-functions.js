@@ -24,14 +24,11 @@ import { getSessionInfo } from './auth-functions';
  * 
  * filterType = "all":
  * - Admin: sieht ALLE non-deleted Tasks (is_deleted = 0)
- * - User: sieht NUR Tasks, die ihm zugewiesen sind (assigned_to = username)
+ * - User: sieht ALLE non-deleted Tasks (is_deleted = 0)
  * 
  * filterType = "my":
- * - User: identisch zu "all" (nur eigene Zuweisungen)
- * - Admin: sieht weiterhin ALLE
- * 
- * Hintergrund:
- * User sollen keine Tasks sehen, die anderen (z.B. Admin) zugewiesen sind.
+ * - Admin: sieht NUR Tasks, die dem Admin zugewiesen sind (assigned_to = username)
+ * - User: sieht NUR Tasks, die ihm zugewiesen sind (assigned_to = username)
  */
 export const getTasksForList = createServerFn({ method: 'POST' })
   .inputValidator((data) => data)
@@ -46,25 +43,25 @@ export const getTasksForList = createServerFn({ method: 'POST' })
     const db = await getDb();
     const filterType = data.filterType || 'all'; // Default: "all"
 
-    // ===== ADMIN: Sieht IMMER alles (unabhaengig vom Filter) =====
-    if (session.role === 'admin') {
+    if (filterType === 'my') {
+      // ===== "Meine Aufgaben": Immer nur eigene Zuweisungen =====
       return all(
         db,
         `SELECT id, title, status, priority, due_date AS dueDate, owner_id, assigned_to AS assignee
          FROM tasks
-         WHERE is_deleted = 0
-         ORDER BY id ASC`
+         WHERE is_deleted = 0 AND lower(assigned_to) = lower(?)
+         ORDER BY id ASC`,
+        [session.username]
       );
     }
 
-    // ===== USER: Nur Tasks, die dem User zugewiesen sind =====
+    // ===== "Alle Aufgaben": Fuer Admin UND User alle Tasks =====
     return all(
       db,
       `SELECT id, title, status, priority, due_date AS dueDate, owner_id, assigned_to AS assignee
        FROM tasks
-       WHERE is_deleted = 0 AND assigned_to = ?
-       ORDER BY id ASC`,
-      [session.username]
+       WHERE is_deleted = 0
+       ORDER BY id ASC`
     );
   });
 
@@ -295,7 +292,7 @@ export const updateTask = createServerFn({ method: 'POST' })
  * Autorisierung (Enforcement Point):
  * ==================================
  * - Admin: Kann JEDE Task loeschen
- * - User: Kann nur ihre eigenen Tasks loeschen
+ * - User: Kann nur Tasks loeschen, die ihm zugewiesen sind
  */
 export const deleteTask = createServerFn({ method: 'POST' })
   .inputValidator((data) => data)
@@ -318,7 +315,7 @@ export const deleteTask = createServerFn({ method: 'POST' })
       // Lade Task, um Ownership zu pruefen
       const task = await get(
         db,
-        'SELECT id, owner_id FROM tasks WHERE id = ? AND is_deleted = 0',
+        'SELECT id, owner_id, assigned_to FROM tasks WHERE id = ? AND is_deleted = 0',
         [Number(taskId)]
       );
 
@@ -326,13 +323,15 @@ export const deleteTask = createServerFn({ method: 'POST' })
         return { success: false, error: 'Task nicht gefunden' };
       }
 
-      // Ownership Check
+      // Zuweisungs-Check: Admin darf alles, User nur eigene Zuweisungen
       const isAdmin = session.role === 'admin';
-      const isOwner = Number(task.owner_id) === Number(session.userId);
+      const isAssignee =
+        String(task.assigned_to || '').toLowerCase() ===
+        String(session.username || '').toLowerCase();
 
-      if (!isAdmin && !isOwner) {
+      if (!isAdmin && !isAssignee) {
         console.error(
-          `[SECURITY] User ${session.userId} tried to delete task ${taskId} owned by ${task.owner_id}`
+          `[SECURITY] User ${session.userId} tried to delete task ${taskId} assigned to ${task.assigned_to}`
         );
         return { success: false, error: 'Berechtigung verweigert' };
       }

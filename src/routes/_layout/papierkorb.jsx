@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { Trash2, RotateCcw, AlertCircle, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../__root';
 import { getTasksForTrash, permanentlyDeleteTask, restoreTask } from '../../server/task-functions';
 import {
@@ -100,7 +101,7 @@ export const Route = createFileRoute('/_layout/papierkorb')({
   loader: async () => {
     // Die sessionId wird nach der Auth geladen (im Component via useAuth)
     // Deshalb geben wir hier nur ein leeres Array zurueck
-    // und laden im Component uber useEffect
+    // und laden im Component ueber TanStack Query
     return { tasks: [] };
   },
   component: PapierkorbPage,
@@ -108,39 +109,61 @@ export const Route = createFileRoute('/_layout/papierkorb')({
 
 function PapierkorbPage() {
   const { session, isAdmin } = useAuth();
-  const [tasks, setTasks] = useState([]);
+  const queryClient = useQueryClient();
+  const trashQueryKey = ['tasks', 'trash', session?.sessionId ?? null];
   const [permanentDeleteId, setPermanentDeleteId] = useState(null);
   const [showConfirmPermanent, setShowConfirmPermanent] = useState(false);
 
   /**
-   * Lade gelöschte Tasks
-   * 
-   * useEffect wird nach dem Render ausgefuehrt - deshalb laden wir
-   * die Trash-Tasks hier (wie in aufgaben.jsx auch).
+   * TanStack Query fuer Papierkorb
+   * ==============================
+   * Auch hier nutzen wir Query, damit die Daten gecached werden
+   * und sich automatisch aktualisieren, sobald Tasks geloescht
+   * oder wiederhergestellt werden.
    */
-  useEffect(() => {
-    let isActive = true;
-
-    async function loadTrashTasks() {
-      if (!session?.sessionId) {
-        if (isActive) setTasks([]);
-        return;
-      }
-
+  const trashQuery = useQuery({
+    queryKey: trashQueryKey,
+    enabled: Boolean(session?.sessionId),
+    queryFn: async () => {
       const nextTasks = await getTasksForTrash({
         data: { sessionId: session.sessionId },
       });
 
-      if (!isActive) return;
-      setTasks(nextTasks || []);
-    }
+      return nextTasks || [];
+    },
+    staleTime: 60 * 1000,
+    gcTime: 5 * 60 * 1000,
+  });
 
-    loadTrashTasks();
+  const tasks = trashQuery.data || [];
 
-    return () => {
-      isActive = false;
-    };
-  }, [session?.sessionId]);
+  const restoreTaskMutation = useMutation({
+    mutationFn: async (payload) => restoreTask({ data: payload }),
+    onSuccess: (result, variables) => {
+      if (!result?.success) return;
+
+      queryClient.setQueryData(trashQueryKey, (prev = []) =>
+        prev.filter((task) => task.id !== variables.taskId)
+      );
+
+      // Restore bewegt Tasks zur aktiven Liste -> beide Queries invalidieren.
+      queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] });
+      queryClient.invalidateQueries({ queryKey: ['tasks', 'trash'] });
+    },
+  });
+
+  const permanentlyDeleteMutation = useMutation({
+    mutationFn: async (payload) => permanentlyDeleteTask({ data: payload }),
+    onSuccess: (result, variables) => {
+      if (!result?.success) return;
+
+      queryClient.setQueryData(trashQueryKey, (prev = []) =>
+        prev.filter((task) => task.id !== variables.taskId)
+      );
+
+      queryClient.invalidateQueries({ queryKey: ['tasks', 'trash'] });
+    },
+  });
 
   function getOwnerName(ownerId) {
     if (ownerId === 1) return 'Admin';
@@ -169,8 +192,9 @@ function PapierkorbPage() {
     if (!session?.sessionId) return;
 
     try {
-      const result = await restoreTask({
-        data: { sessionId: session.sessionId, taskId },
+      const result = await restoreTaskMutation.mutateAsync({
+        sessionId: session.sessionId,
+        taskId,
       });
 
       if (!result.success) {
@@ -178,7 +202,6 @@ function PapierkorbPage() {
         return;
       }
 
-      setTasks((prev) => prev.filter((task) => task.id !== taskId));
     } catch (error) {
       console.error('Fehler beim Wiederherstellen:', error);
       alert('Fehler beim Wiederherstellen. Bitte versuche es erneut.');
@@ -204,8 +227,9 @@ function PapierkorbPage() {
     if (!isAdmin || !session?.sessionId || !permanentDeleteId) return;
 
     try {
-      const result = await permanentlyDeleteTask({
-        data: { sessionId: session.sessionId, taskId: permanentDeleteId },
+      const result = await permanentlyDeleteMutation.mutateAsync({
+        sessionId: session.sessionId,
+        taskId: permanentDeleteId,
       });
 
       if (!result.success) {
@@ -213,7 +237,6 @@ function PapierkorbPage() {
         return;
       }
 
-      setTasks((prev) => prev.filter((task) => task.id !== permanentDeleteId));
       setShowConfirmPermanent(false);
       setPermanentDeleteId(null);
     } catch (error) {

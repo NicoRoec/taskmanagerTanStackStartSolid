@@ -1,7 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { Plus, ArrowUpDown, ArrowUp, ArrowDown, PenSquare, Trash2, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useForm } from '@tanstack/react-form';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../__root';
 import { getTasksForList, createTask, updateTask, deleteTask } from '../../server/task-functions';
 import {
@@ -153,37 +154,104 @@ function AufgabenPage() {
     return value;
   }
 
-  // Tasks aus der DB (Loader-Daten)
-  const [tasks, setTasks] = useState(loaderData.tasks || []);
+  const queryClient = useQueryClient();
+  const tasksQueryKey = ['tasks', 'list', session?.sessionId ?? null, selectedTab];
 
-  useEffect(() => {
-    let isActive = true;
-
-    async function loadTasks() {
-      if (!session?.sessionId) {
-        if (isActive) setTasks([]);
-        return;
-      }
-
+  /**
+   * TanStack Query fuer Task-Listen
+   * ===============================
+   * Wir nutzen Query statt useEffect + useState, weil:
+   * - Caching zwischen Routes funktioniert (kein doppeltes Laden)
+   * - Mehrere Komponenten koennen dieselben Daten abfragen (Deduping)
+   * - Hintergrund-Refetch sorgt fuer frische Daten ohne UI-Flackern
+   */
+  const tasksQuery = useQuery({
+    queryKey: tasksQueryKey,
+    enabled: Boolean(session?.sessionId),
+    placeholderData: loaderData.tasks || [],
+    queryFn: async () => {
       const nextTasks = await getTasksForList({
         data: { sessionId: session.sessionId, filterType: selectedTab },
       });
 
-      if (!isActive) return;
-      setTasks(
-        (nextTasks || []).map((task) => ({
-          ...task,
-          assignee: normalizeAssignee(task.assignee),
-        }))
+      return (nextTasks || []).map((task) => ({
+        ...task,
+        assignee: normalizeAssignee(task.assignee),
+      }));
+    },
+    staleTime: 60 * 1000,
+    gcTime: 5 * 60 * 1000,
+  });
+
+  const tasks = tasksQuery.data || [];
+
+  /**
+   * Mutations fuer Create/Update/Delete
+   * ===================================
+   * TanStack Query kapselt die Schreiboperationen und aktualisiert
+   * den Cache gezielt, damit die UI sofort konsistent bleibt.
+   */
+  const createTaskMutation = useMutation({
+    mutationFn: async (payload) => createTask({ data: payload }),
+    onSuccess: (result, variables) => {
+      if (!result?.success) return;
+
+      queryClient.setQueryData(tasksQueryKey, (prev = []) => [
+        ...prev,
+        {
+          id: result.taskId,
+          title: variables.title,
+          status: variables.status,
+          priority: variables.priority,
+          dueDate: formatDateForDisplay(variables.dueDate),
+          assignee: normalizeAssignee(variables.assignedTo),
+          owner_id: session?.userId,
+        },
+      ]);
+
+      // Andere Filter-Views aktualisieren (z.B. "my" vs "all").
+      queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] });
+    },
+  });
+
+  const updateTaskMutation = useMutation({
+    mutationFn: async (payload) => updateTask({ data: payload }),
+    onSuccess: (result, variables) => {
+      if (!result?.success) return;
+
+      queryClient.setQueryData(tasksQueryKey, (prev = []) =>
+        prev.map((task) =>
+          task.id === variables.taskId
+            ? {
+                ...task,
+                title: variables.title,
+                status: variables.status,
+                priority: variables.priority,
+                dueDate: formatDateForDisplay(variables.dueDate),
+                assignee: normalizeAssignee(variables.assignedTo),
+              }
+            : task
+        )
       );
-    }
 
-    loadTasks();
+      queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] });
+    },
+  });
 
-    return () => {
-      isActive = false;
-    };
-  }, [session?.sessionId, selectedTab]);
+  const deleteTaskMutation = useMutation({
+    mutationFn: async (payload) => deleteTask({ data: payload }),
+    onSuccess: (result, variables) => {
+      if (!result?.success) return;
+
+      queryClient.setQueryData(tasksQueryKey, (prev = []) =>
+        prev.filter((task) => task.id !== variables.taskId)
+      );
+
+      // Soft Delete fuehrt Task in den Papierkorb - Trash-Query muss updaten.
+      queryClient.invalidateQueries({ queryKey: ['tasks', 'trash'] });
+      queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] });
+    },
+  });
 
   /**
    * TanStack Form – wie funktioniert es hier?
@@ -236,71 +304,37 @@ function AufgabenPage() {
         if (editingTaskId) {
           // ===== UPDATE TASK =====
           // Server Function ueberprueft: nur Admin oder Owner darf updaten
-          const result = await updateTask({
-            data: {
-              sessionId: session.sessionId,
-              taskId: editingTaskId,
-              title: value.title,
-              status: value.status,
-              priority: value.priority,
-              dueDate: value.dueDate, // ISO-Format (YYYY-MM-DD) vom input type=date
-              assignedTo: value.assignee, // Zugewiesen an
-            },
+          const result = await updateTaskMutation.mutateAsync({
+            sessionId: session.sessionId,
+            taskId: editingTaskId,
+            title: value.title,
+            status: value.status,
+            priority: value.priority,
+            dueDate: value.dueDate, // ISO-Format (YYYY-MM-DD) vom input type=date
+            assignedTo: value.assignee, // Zugewiesen an
           });
 
           if (!result.success) {
             alert(`Fehler: ${result.error}`);
             return;
           }
-
-          // Update lokale Tasks (UI wird sofort aktualisiert, Server ist Quelle of Truth)
-          setTasks((prev) =>
-            prev.map((task) =>
-              task.id === editingTaskId
-                ? {
-                    ...task,
-                    title: value.title,
-                    status: value.status,
-                    priority: value.priority,
-                    dueDate: formatDateForDisplay(value.dueDate),
-                    assignee: value.assignee, // Zugewiesen an aktualisieren
-                  }
-                : task
-            )
-          );
         } else {
           // ===== CREATE TASK =====
           // Server Function liest owner_id automatisch aus Session
           // Client kann owner_id nicht manipulieren!
-          const result = await createTask({
-            data: {
-              sessionId: session.sessionId,
-              title: value.title,
-              status: value.status,
-              priority: value.priority,
-              dueDate: value.dueDate, // ISO-Format (YYYY-MM-DD) vom input type=date
-              assignedTo: value.assignee, // Zugewiesen an
-            },
+          const result = await createTaskMutation.mutateAsync({
+            sessionId: session.sessionId,
+            title: value.title,
+            status: value.status,
+            priority: value.priority,
+            dueDate: value.dueDate, // ISO-Format (YYYY-MM-DD) vom input type=date
+            assignedTo: value.assignee, // Zugewiesen an
           });
 
           if (!result.success) {
             alert(`Fehler: ${result.error}`);
             return;
           }
-
-          // Neue Task zu lokaler Liste hinzufuegen
-          setTasks((prev) => [
-            ...prev,
-            {
-              id: result.taskId,
-              title: value.title,
-              status: value.status,
-              priority: value.priority,
-              dueDate: formatDateForDisplay(value.dueDate),
-              assignee: value.assignee, // Zugewiesen an
-              owner_id: session.userId, // Ersteller ist aktueller User
-            },
-          ]);
         }
 
         setIsFormOpen(false);
@@ -339,13 +373,12 @@ function AufgabenPage() {
   async function handleDeleteTask(taskId, task) {
     if (!session?.sessionId) return;
 
-    // Ownership-Check: Admin oder Task-Owner darf loeschen
-    let isOwner = false;
-    if (session?.userId && task?.owner_id) {
-      isOwner = Number(session.userId) === Number(task.owner_id);
-    }
+    // Zuweisungs-Check: Admin oder zugewiesener User darf loeschen
+    const isAssignee =
+      String(task?.assignee || '').toLowerCase() ===
+      String(session?.username || '').toLowerCase();
 
-    if (!isAdmin && !isOwner) {
+    if (!isAdmin && !isAssignee) {
       alert('Du darfst nur deine eigenen Aufgaben löschen.');
       return;
     }
@@ -353,8 +386,9 @@ function AufgabenPage() {
     try {
       // Soft Delete: Task wird in Papierkorb verschoben (is_deleted = 1)
       // Keine Bestaetigung noetig - Restore ist noch moglich!
-      const result = await deleteTask({
-        data: { sessionId: session.sessionId, taskId },
+      const result = await deleteTaskMutation.mutateAsync({
+        sessionId: session.sessionId,
+        taskId,
       });
 
       if (!result.success) {
@@ -362,8 +396,6 @@ function AufgabenPage() {
         return;
       }
 
-      // Entferne Task aus lokaler Liste (wird ausgeblendet)
-      setTasks((prev) => prev.filter((task) => task.id !== taskId));
     } catch (error) {
       console.error('Fehler beim Loeschen:', error);
       alert('Fehler beim Loeschen. Bitte versuche es erneut.');
@@ -477,16 +509,15 @@ function AufgabenPage() {
            * - updateTask: WHERE is_deleted = 0 + owner_id Check
            * - deleteTask: owner_id Check (admin bypass)
            */
-          // Ownership-Check: Aktueller User ist Besitzer dieser Task?
-          let isOwner = false;
-          if (session?.userId && row.original?.owner_id) {
-            isOwner = Number(session.userId) === Number(row.original.owner_id);
-          }
+          // Zuweisungs-Check: Aktueller User ist zuständig?
+          const isAssignee =
+            String(row.original?.assignee || '').toLowerCase() ===
+            String(session?.username || '').toLowerCase();
 
           // Edit: Nur Admin
           const canEdit = isAdmin;
-          // Delete: Admin oder Owner
-          const canDelete = isAdmin || isOwner;
+          // Delete: Admin oder zugewiesener User
+          const canDelete = isAdmin || isAssignee;
 
           return (
             <div className="flex items-center gap-3">
