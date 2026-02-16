@@ -1,9 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { Plus, ArrowUpDown, ArrowUp, ArrowDown, PenSquare, Trash2, X } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { Plus, ArrowUpDown, ArrowUp, ArrowDown, PenSquare, Trash2, X, Search } from 'lucide-react';
+import { useMemo, useState, useCallback, useRef } from 'react';
 import { useForm } from '@tanstack/react-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../__root';
+import { useSearch } from '@tanstack/react-router';
+import { z } from 'zod';
 import { getTasksForList, createTask, updateTask, deleteTask } from '../../server/task-functions';
 import {
   useReactTable,
@@ -89,6 +91,24 @@ import {
 export const Route = createFileRoute('/_layout/aufgaben')({
   component: AufgabenPage,
   /**
+   * TanStack Search - URL-State Management
+   * ======================================
+   * validateSearch definiert, welche URL-Parameter zu dieser Route gehören.
+   * Mit Zod wird der Typ validiert und normalisiert.
+   * 
+   * TanStack Router hält diese Parameter im URL sync:
+   * - /aufgaben?q=Mockup -> useSearch() gibt { q: 'Mockup' } zurück
+   * - Wenn Nutzer URL direkt öffnet: Suchfeld wird mit Wert gefüllt
+   * - Bei Bookmarks/Share: Der Suchzustand ist automatisch gespeichert!
+   * 
+   * Zod Schema: Definiert den Typ der Suchparams
+   * - q: optionaler string (Suchtext), default: leerer String
+   * - Wird vom React Router zur Validierung/Normalisierung genutzt
+   */
+  validateSearch: z.object({
+    q: z.string().optional().default(''),
+  }).parse,
+  /**
    * TanStack Router Loader
    * ======================
    * 
@@ -105,9 +125,34 @@ export const Route = createFileRoute('/_layout/aufgaben')({
 function AufgabenPage() {
   const { isAdmin, session } = useAuth();
   const loaderData = Route.useLoaderData() || { tasks: [] };
+  const navigate = Route.useNavigate();
+  const search = useSearch({ from: '/_layout/aufgaben' });
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [selectedTab, setSelectedTab] = useState('all');
+  const searchInputRef = useRef();
+
+  /**
+   * Debounce für Suchfeld
+   * ====================
+   * Wir wollen nicht bei JEDEM Keystroke einen neuen Query starten.
+   * debounceTimer verzögert den URL-Update um 300ms.
+   * Dadurch: Nutzer tippt "Mockup", und erst 300ms nach dem letzten Keystroke
+   * wird die Query neu gemacht.
+   */
+  const debounceTimer = useRef();
+
+  const handleSearchChange = useCallback(
+    (value) => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+      debounceTimer.current = setTimeout(() => {
+        navigate({ search: (prev) => ({ ...prev, q: value }) });
+      }, 300);
+    },
+    [navigate]
+  );
 
   // Mock-Liste der Benutzer für "Zugewiesen an"
   const userOptions = [
@@ -155,15 +200,20 @@ function AufgabenPage() {
   }
 
   const queryClient = useQueryClient();
-  const tasksQueryKey = ['tasks', 'list', session?.sessionId ?? null, selectedTab];
+  const tasksQueryKey = ['tasks', 'list', session?.sessionId ?? null, selectedTab, search.q];
 
   /**
-   * TanStack Query fuer Task-Listen
-   * ===============================
-   * Wir nutzen Query statt useEffect + useState, weil:
-   * - Caching zwischen Routes funktioniert (kein doppeltes Laden)
-   * - Mehrere Komponenten koennen dieselben Daten abfragen (Deduping)
-   * - Hintergrund-Refetch sorgt fuer frische Daten ohne UI-Flackern
+   * TanStack Query + TanStack Search Integration
+   * ============================================
+   * Die QueryKey enthält AUCH den search.q Parameter.
+   * Das bedeutet: Wenn URL sich ändert (z.B. ?q=Mockup), wird
+   * automatisch eine neue Query mit den neuen Daten gemacht.
+   * 
+   * TanStack Router + Query Sync:
+   * - URL ändert → search.q ändert
+   * - search.q ändert → queryKey ändert
+   * - queryKey ändert → TanStack Query refetcht automatisch
+   * ✅ Perfekt für bookmarkbare/shareable Suchfilter!
    */
   const tasksQuery = useQuery({
     queryKey: tasksQueryKey,
@@ -171,7 +221,11 @@ function AufgabenPage() {
     placeholderData: loaderData.tasks || [],
     queryFn: async () => {
       const nextTasks = await getTasksForList({
-        data: { sessionId: session.sessionId, filterType: selectedTab },
+        data: {
+          sessionId: session.sessionId,
+          filterType: selectedTab,
+          searchQuery: search.q,  // Suchtext aus URL zum Server senden
+        },
       });
 
       return (nextTasks || []).map((task) => ({
@@ -571,6 +625,35 @@ function AufgabenPage() {
       <div className="mb-6">
         <div className="flex items-center gap-4 mb-4">
           <h2 className="text-lg font-semibold text-gray-700">Aufgabenliste</h2>
+        </div>
+        
+        {/* Suchfeld - TanStack Search Integration */}
+        <div className="mb-4 relative">
+          {/*
+            TanStack Search Suchfeld
+            ========================
+            Das Input-Feld speichert seinen Wert in der URL (?q=...).
+            Bei jedem Keystroke wird nach 300ms die Query neu gestartet.
+            
+            Vorteile dieser Implementierung:
+            1. Suchzustand ist bookmarkbar/shareable (URL enthält q-Param)
+            2. Browser Back/Forward funktioniert (Router verwaltet History)
+            3. Mehrere Tabs/Fenster sind automatisch synced (gleiche URL = gleiche Suche)
+            4. Suchverlauf ist im Browser-History sichtbar
+            
+            Ohne TanStack Search würde die Suche nur lokal sein (nicht in URL).
+          */}
+          <div className="relative">
+            <Search size={18} className="absolute left-3 top-2.5 text-gray-400" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              placeholder="Nach Aufgaben suchen..."
+              defaultValue={search.q}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
         </div>
         
         {/* Filter Tabs - Visibility Control */}

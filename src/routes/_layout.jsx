@@ -62,17 +62,9 @@ function LayoutComponent() {
             <h1 className="text-lg font-semibold text-gray-800">Taskmanager</h1>
           </div>
 
-          {/* Suchleiste startet dort, wo auch der Inhalt beginnt */}
-          <div className="flex-1 flex items-center justify-between">
-            <div className="max-w-md w-full">
-              <input
-                type="text"
-                placeholder="Aufgabe suchen..."
-                className="w-full px-4 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-
-            <div className="flex items-center gap-3 ml-6">
+          {/* User Menu Bereich */}
+          <div className="flex-1 flex items-center justify-end">
+            <div className="flex items-center gap-3">
               {/* User Menu Button - Dropdown mit Login/Logout */}
               <div className="relative">
                 <button 

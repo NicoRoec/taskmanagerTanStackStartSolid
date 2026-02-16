@@ -12,12 +12,12 @@ import { getSessionInfo } from './auth-functions';
  */
 
 /**
- * Hole Tasks für die Hauptliste mit steuerbarem Filter
+ * Hole Tasks für die Hauptliste mit steuerbarem Filter UND Suchtext
  * 
- * TanStack Router + Loader:
- * =========================
- * Diese Server Function wird vom Loader der aufgaben.jsx Route aufgerufen.
- * Der Loader laeuft VOR dem Render und fuellt die initiale Datenliste.
+ * TanStack Router + TanStack Search + TanStack Query:
+ * ===================================================
+ * Diese Server Function wird vom Client-Hook aufgerufen.
+ * Der searchQuery Parameter kommt von der URL (TanStack Router Search).
  * 
  * Sichtbarkeits-Regeln (serverseitig durchgesetzt):
  * =================================================
@@ -29,6 +29,11 @@ import { getSessionInfo } from './auth-functions';
  * filterType = "my":
  * - Admin: sieht NUR Tasks, die dem Admin zugewiesen sind (assigned_to = username)
  * - User: sieht NUR Tasks, die ihm zugewiesen sind (assigned_to = username)
+ * 
+ * searchQuery Parameter:
+ * - Wenn vorhanden: Filtert per SQL LIKE auf Titel
+ * - Case-insensitive Suche (z.B. "Mock" findet "Mockup")
+ * - Funktioniert mit beiden Filtern (all + my)
  */
 export const getTasksForList = createServerFn({ method: 'POST' })
   .inputValidator((data) => data)
@@ -42,26 +47,32 @@ export const getTasksForList = createServerFn({ method: 'POST' })
 
     const db = await getDb();
     const filterType = data.filterType || 'all'; // Default: "all"
+    const searchQuery = data.searchQuery || ''; // Search-Query aus URL
+
+    // ===== SUCHFILTER VORBEREITEN =====
+    // Wenn Suchtext eingegeben: SQL LIKE für Title-Suche
+    let whereClause = 'WHERE is_deleted = 0';
+    let params = [];
 
     if (filterType === 'my') {
-      // ===== "Meine Aufgaben": Immer nur eigene Zuweisungen =====
-      return all(
-        db,
-        `SELECT id, title, status, priority, due_date AS dueDate, owner_id, assigned_to AS assignee
-         FROM tasks
-         WHERE is_deleted = 0 AND lower(assigned_to) = lower(?)
-         ORDER BY id ASC`,
-        [session.username]
-      );
+      whereClause += ' AND lower(assigned_to) = lower(?)';
+      params.push(session.username);
     }
 
-    // ===== "Alle Aufgaben": Fuer Admin UND User alle Tasks =====
+    // Suchtext (alle Spalten berücksichtigen)
+    if (searchQuery.trim()) {
+      whereClause += ' AND (lower(title) LIKE lower(?) OR lower(assigned_to) LIKE lower(?))';
+      const searchPattern = `%${searchQuery}%`;
+      params.push(searchPattern, searchPattern);
+    }
+
     return all(
       db,
       `SELECT id, title, status, priority, due_date AS dueDate, owner_id, assigned_to AS assignee
        FROM tasks
-       WHERE is_deleted = 0
-       ORDER BY id ASC`
+       ${whereClause}
+       ORDER BY id ASC`,
+      params
     );
   });
 
