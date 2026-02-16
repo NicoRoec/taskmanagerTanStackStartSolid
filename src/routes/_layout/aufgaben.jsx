@@ -92,6 +92,28 @@ function AufgabenPage() {
     'Chris Coder',
   ];
 
+  function formatDateToInput(value) {
+    if (!value) return '';
+    if (value.includes('.')) {
+      const [day, month, year] = value.split('.');
+      if (year && month && day) {
+        return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+      }
+    }
+    return value;
+  }
+
+  function formatDateForDisplay(value) {
+    if (!value) return '';
+    if (value.includes('-')) {
+      const [year, month, day] = value.split('-');
+      if (year && month && day) {
+        return `${day}.${month}.${year}`;
+      }
+    }
+    return value;
+  }
+
   // Mock-Daten für die Aufgaben-Tabelle (lokaler State, keine DB)
   const [tasks, setTasks] = useState([
     {
@@ -136,44 +158,6 @@ function AufgabenPage() {
     },
   ]);
 
-  // Helpers für Admin-Aktionen
-  function openCreateForm() {
-    if (!isAdmin) return;
-    setEditingTaskId(null);
-    setIsFormOpen(true);
-  }
-
-  function openEditForm(task) {
-    if (!isAdmin) return;
-    setEditingTaskId(task.id);
-    form.setValues({
-      title: task.title,
-      status: task.status,
-      priority: task.priority,
-      dueDate: task.dueDate,
-      assignee: task.assignee,
-    });
-    setIsFormOpen(true);
-  }
-
-  function deleteTask(taskId) {
-    if (!isAdmin) return;
-    setDeleteTaskId(taskId);
-    setIsDeleteOpen(true);
-  }
-
-  function confirmDelete() {
-    if (!isAdmin || !deleteTaskId) return;
-    setTasks((prev) => prev.filter((task) => task.id !== deleteTaskId));
-    setIsDeleteOpen(false);
-    setDeleteTaskId(null);
-  }
-
-  function cancelDelete() {
-    setIsDeleteOpen(false);
-    setDeleteTaskId(null);
-  }
-
   /**
    * TanStack Form – wie funktioniert es hier?
    * =========================================
@@ -208,11 +192,14 @@ function AufgabenPage() {
     onSubmit: async ({ value }) => {
       if (!isAdmin) return;
 
+      const dueDateDisplay = formatDateForDisplay(value.dueDate);
+      const nextValue = { ...value, dueDate: dueDateDisplay };
+
       if (editingTaskId) {
         setTasks((prev) =>
           prev.map((task) =>
             task.id === editingTaskId
-              ? { ...task, ...value }
+              ? { ...task, ...nextValue }
               : task
           )
         );
@@ -222,7 +209,7 @@ function AufgabenPage() {
           ...prev,
           {
             id: nextId,
-            ...value,
+            ...nextValue,
           },
         ]);
       }
@@ -232,6 +219,43 @@ function AufgabenPage() {
       form.reset();
     },
   });
+
+  // Helpers für Admin-Aktionen
+  function openCreateForm() {
+    if (!isAdmin) return;
+    setEditingTaskId(null);
+    form.reset();
+    setIsFormOpen(true);
+  }
+
+  function openEditForm(task) {
+    if (!isAdmin) return;
+    setEditingTaskId(task.id);
+    form.setFieldValue('title', task.title);
+    form.setFieldValue('status', task.status);
+    form.setFieldValue('priority', task.priority);
+    form.setFieldValue('dueDate', formatDateToInput(task.dueDate));
+    form.setFieldValue('assignee', task.assignee);
+    setIsFormOpen(true);
+  }
+
+  function deleteTask(taskId) {
+    if (!isAdmin) return;
+    setDeleteTaskId(taskId);
+    setIsDeleteOpen(true);
+  }
+
+  function confirmDelete() {
+    if (!isAdmin || !deleteTaskId) return;
+    setTasks((prev) => prev.filter((task) => task.id !== deleteTaskId));
+    setIsDeleteOpen(false);
+    setDeleteTaskId(null);
+  }
+
+  function cancelDelete() {
+    setIsDeleteOpen(false);
+    setDeleteTaskId(null);
+  }
 
   // Spalten-Definition für TanStack Table
   const columns = useMemo(
