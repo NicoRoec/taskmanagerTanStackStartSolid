@@ -1,8 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { Plus, ArrowUpDown, ArrowUp, ArrowDown, PenSquare, Trash2, X } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from '@tanstack/react-form';
 import { useAuth } from '../__root';
+import { getTasksForList, createTask, updateTask, deleteTask } from '../../server/task-functions';
 import {
   useReactTable,
   getCoreRowModel,
@@ -11,41 +12,54 @@ import {
 } from '@tanstack/react-table';
 
 /**
- * TanStack Table - Headless UI Bibliothek für Tabellen
- * ====================================================
+ * TanStack Table - Headless Tabellen-Logik für mehrere Routes
+ * ===========================================================
  * 
- * Was ist TanStack Table?
- * -----------------------
- * TanStack Table ist eine leistungsstarke, headless (UI-agnostische) 
- * Tabellenbibliothek für React, Vue, Solid und andere Frameworks.
+ * DIESE DATEI: Aktive Tasks (nicht gelöschte)
+ * VERGLEICH: src/routes/_layout/papierkorb.jsx (gelöschte Tasks)
  * 
- * Was bedeutet "headless"?
- * ------------------------
- * "Headless" bedeutet, dass die Bibliothek KEINE vorgefertigten UI-Komponenten
- * oder Styles bereitstellt. Sie liefert nur die LOGIK und STATE-MANAGEMENT:
- * - Sortierung
- * - Filterung
- * - Paginierung
- * - Spalten-Verwaltung
- * - Row-Selection
+ * Headless Pattern erklärt:
+ * ========================
+ * TanStack Table ist "headless" - das bedeutet:
+ * - Die Bibliothek liefert NUR die LOGIK (Sortierung, Filter, etc.)
+ * - Keine vordefinierten HTML/CSS Komponenten
+ * - WIR definieren das Aussehen mit Tailwind
  * 
- * DU entscheidest, wie die Tabelle aussieht (z.B. mit Tailwind CSS).
+ * Vorteil: Beide Routes (aufgaben + papierkorb) können die gleiche
+ * TanStack Table Logic nutzen, aber unterschiedliche UI/Aktionen haben!
  * 
- * Welche Probleme löst TanStack Table?
- * ------------------------------------
- * 1. **Komplexe Tabellen-Logik**: Sortierung, Filterung und Paginierung
- *    sind komplex zu implementieren - TanStack Table übernimmt das.
+ * Spalten-Wiederverwendung:
+ * =========================
+ * Beide Routes nutzen GLEICHE Spalten für:
+ * - Nr. (ID)
+ * - Titel
+ * - Status (mit Farben)
+ * - Priorität (mit Farben)
+ * - Fällig am (Datum)
  * 
- * 2. **Performance**: Effizientes Rendering auch bei tausenden Zeilen
- *    durch Virtualisierung und optimierte Updates.
+ * Unterschiedliche Spalten pro Route:
+ * ===================================
  * 
- * 3. **Flexibilität**: Keine festgelegten Styles - passt perfekt zu
- *    jedem Design-System (hier: Tailwind CSS).
+ * /aufgaben:
+ *   Aktionen: [Bearbeiten (Pen)] [Soft Delete (Trash)]
+ *   - Nur Admins sehen diese Buttons
+ *   - Bearbeiten öffnet Modal mit TanStack Form
+ *   - Soft Delete setzt is_deleted=1 (reversibel!)
  * 
- * 4. **Type-Safety**: Vollständige TypeScript-Unterstützung für
- *    Spalten-Definitionen und Daten.
+ * /papierkorb:
+ *   Aktionen: [Wiederherstellen (Undo)] [Permanent Delete (Trash)]
+ *   - Alle User können ihre eigenen Tasks wiederherstellen
+ *   - Nur Admins können permanent löschen (hard delete)
+ *   - Keine Bearbeitung möglich (Tasks sind gelöscht!)
  * 
- * 5. **Framework-agnostisch**: Gleiche API für React, Vue, Solid, etc.
+ * Diese Unterschiede werden in der useReactTable() columns Definition
+ * durch Conditionals (isAdmin) definiert.
+ * 
+ * Lizenzmodell:
+ * =============
+ * Statt zwei völlig verschiedene Tabellen-Komponenten zu schreiben,
+ * nutzen wir ein Spalten-System. Die Zeilen-rendering ist identisch,
+ * aber die Action-Spalte ändert sich je nach Route/Kontext.
  */
 
 /**
@@ -73,14 +87,25 @@ import {
 
 export const Route = createFileRoute('/_layout/aufgaben')({
   component: AufgabenPage,
+  /**
+   * TanStack Router Loader
+   * ======================
+   * 
+   * Loader laufen vor dem Rendern der Route. Hier laden wir die Tasks
+   * aus der DB, damit die Seite direkt mit Daten gerendert wird.
+   */
+  loader: async () => {
+    // SSR-sicher: Die Tasks werden erst nach dem Hydrieren im Client geladen,
+    // damit Server- und Client-HTML uebereinstimmen.
+    return { tasks: [] };
+  },
 });
 
 function AufgabenPage() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, session } = useAuth();
+  const loaderData = Route.useLoaderData() || { tasks: [] };
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState(null);
-  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
-  const [deleteTaskId, setDeleteTaskId] = useState(null);
 
   // Mock-Liste der Benutzer für "Zugewiesen an"
   const userOptions = [
@@ -114,49 +139,50 @@ function AufgabenPage() {
     return value;
   }
 
-  // Mock-Daten für die Aufgaben-Tabelle (lokaler State, keine DB)
-  const [tasks, setTasks] = useState([
-    {
-      id: 1,
-      title: 'Mockup erstellen',
-      status: 'in Arbeit',
-      priority: 'Mittel',
-      dueDate: '31.03.2026',
-      assignee: 'Nutzer123',
-    },
-    {
-      id: 2,
-      title: 'Abgabe',
-      status: 'Neu',
-      priority: 'Hoch',
-      dueDate: '10.04.2026',
-      assignee: 'Nutzer123',
-    },
-    {
-      id: 3,
-      title: 'Code Review',
-      status: 'Erledigt',
-      priority: 'Niedrig',
-      dueDate: '15.02.2026',
-      assignee: 'Max Mustermann',
-    },
-    {
-      id: 4,
-      title: 'Testing durchführen',
-      status: 'in Arbeit',
-      priority: 'Hoch',
-      dueDate: '20.03.2026',
-      assignee: 'Erika Musterfrau',
-    },
-    {
-      id: 5,
-      title: 'Dokumentation schreiben',
-      status: 'Neu',
-      priority: 'Mittel',
-      dueDate: '25.03.2026',
-      assignee: 'Jon Doe',
-    },
-  ]);
+  function normalizeAssignee(value) {
+    if (value === null || value === undefined || value === '') {
+      return userOptions[0];
+    }
+    const numericValue = Number(value);
+    if (!Number.isNaN(numericValue)) {
+      if (numericValue === 1) return 'Admin';
+      if (numericValue === 2) return 'Nutzer123';
+      return `User ${numericValue}`;
+    }
+    return value;
+  }
+
+  // Tasks aus der DB (Loader-Daten)
+  const [tasks, setTasks] = useState(loaderData.tasks || []);
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadTasks() {
+      if (!session?.sessionId) {
+        if (isActive) setTasks([]);
+        return;
+      }
+
+      const nextTasks = await getTasksForList({
+        data: { sessionId: session.sessionId },
+      });
+
+      if (!isActive) return;
+      setTasks(
+        (nextTasks || []).map((task) => ({
+          ...task,
+          assignee: normalizeAssignee(task.assignee),
+        }))
+      );
+    }
+
+    loadTasks();
+
+    return () => {
+      isActive = false;
+    };
+  }, [session?.sessionId]);
 
   /**
    * TanStack Form – wie funktioniert es hier?
@@ -181,6 +207,19 @@ function AufgabenPage() {
    * 2) Jedes Feld registriert sich über <form.Field> (Name + Validatoren).
    * 3) form.handleSubmit() validiert und ruft onSubmit auf.
    */
+  /**
+   * TanStack Form mit Server Functions
+   * ==================================
+   * 
+   * Wichtig: Das Formular sendet nun Daten an Server Functions,
+   * nicht nur an lokale useState-Updates!
+   * 
+   * onSubmit wird async und ruft:
+   * - createTask() fuer neue Tasks
+   * - updateTask() fuer Updates
+   * 
+   * Diese Server Functions enforcing Ownership & Autorisierung auf dem Server!
+   */
   const form = useForm({
     defaultValues: {
       title: '',
@@ -190,33 +229,82 @@ function AufgabenPage() {
       assignee: userOptions[0],
     },
     onSubmit: async ({ value }) => {
-      if (!isAdmin) return;
+      if (!isAdmin || !session?.sessionId) return;
 
-      const dueDateDisplay = formatDateForDisplay(value.dueDate);
-      const nextValue = { ...value, dueDate: dueDateDisplay };
+      try {
+        if (editingTaskId) {
+          // ===== UPDATE TASK =====
+          // Server Function ueberprueft: nur Admin oder Owner darf updaten
+          const result = await updateTask({
+            data: {
+              sessionId: session.sessionId,
+              taskId: editingTaskId,
+              title: value.title,
+              status: value.status,
+              priority: value.priority,
+              dueDate: value.dueDate, // ISO-Format (YYYY-MM-DD) vom input type=date
+            },
+          });
 
-      if (editingTaskId) {
-        setTasks((prev) =>
-          prev.map((task) =>
-            task.id === editingTaskId
-              ? { ...task, ...nextValue }
-              : task
-          )
-        );
-      } else {
-        const nextId = Math.max(0, ...tasks.map((t) => t.id)) + 1;
-        setTasks((prev) => [
-          ...prev,
-          {
-            id: nextId,
-            ...nextValue,
-          },
-        ]);
+          if (!result.success) {
+            alert(`Fehler: ${result.error}`);
+            return;
+          }
+
+          // Update lokale Tasks (UI wird sofort aktualisiert, Server ist Quelle of Truth)
+          setTasks((prev) =>
+            prev.map((task) =>
+              task.id === editingTaskId
+                ? {
+                    ...task,
+                    title: value.title,
+                    status: value.status,
+                    priority: value.priority,
+                    dueDate: formatDateForDisplay(value.dueDate),
+                  }
+                : task
+            )
+          );
+        } else {
+          // ===== CREATE TASK =====
+          // Server Function liest owner_id automatisch aus Session
+          // Client kann owner_id nicht manipulieren!
+          const result = await createTask({
+            data: {
+              sessionId: session.sessionId,
+              title: value.title,
+              status: value.status,
+              priority: value.priority,
+              dueDate: value.dueDate, // ISO-Format (YYYY-MM-DD) vom input type=date
+            },
+          });
+
+          if (!result.success) {
+            alert(`Fehler: ${result.error}`);
+            return;
+          }
+
+          // Neue Task zu lokaler Liste hinzufuegen
+          setTasks((prev) => [
+            ...prev,
+            {
+              id: result.taskId,
+              title: value.title,
+              status: value.status,
+              priority: value.priority,
+              dueDate: formatDateForDisplay(value.dueDate),
+              assignee: normalizeAssignee(session.userId),
+            },
+          ]);
+        }
+
+        setIsFormOpen(false);
+        setEditingTaskId(null);
+        form.reset();
+      } catch (error) {
+        console.error('Fehler beim Submit:', error);
+        alert('Fehler beim Speichern. Bitte versuche es erneut.');
       }
-
-      setIsFormOpen(false);
-      setEditingTaskId(null);
-      form.reset();
     },
   });
 
@@ -235,31 +323,68 @@ function AufgabenPage() {
     form.setFieldValue('status', task.status);
     form.setFieldValue('priority', task.priority);
     form.setFieldValue('dueDate', formatDateToInput(task.dueDate));
-    form.setFieldValue('assignee', task.assignee);
+    form.setFieldValue('assignee', normalizeAssignee(task.assignee));
     setIsFormOpen(true);
   }
 
-  function deleteTask(taskId) {
-    if (!isAdmin) return;
-    setDeleteTaskId(taskId);
-    setIsDeleteOpen(true);
-  }
+  async function handleDeleteTask(taskId) {
+    if (!isAdmin || !session?.sessionId) return;
 
-  function confirmDelete() {
-    if (!isAdmin || !deleteTaskId) return;
-    setTasks((prev) => prev.filter((task) => task.id !== deleteTaskId));
-    setIsDeleteOpen(false);
-    setDeleteTaskId(null);
-  }
+    try {
+      // Soft Delete: Task wird in Papierkorb verschoben (is_deleted = 1)
+      // Keine Bestaetigung noetig - Restore ist noch moglich!
+      const result = await deleteTask({
+        data: { sessionId: session.sessionId, taskId },
+      });
 
-  function cancelDelete() {
-    setIsDeleteOpen(false);
-    setDeleteTaskId(null);
+      if (!result.success) {
+        alert(`Fehler: ${result.error}`);
+        return;
+      }
+
+      // Entferne Task aus lokaler Liste (wird ausgeblendet)
+      setTasks((prev) => prev.filter((task) => task.id !== taskId));
+    } catch (error) {
+      console.error('Fehler beim Loeschen:', error);
+      alert('Fehler beim Loeschen. Bitte versuche es erneut.');
+    }
   }
 
   // Spalten-Definition für TanStack Table
   const columns = useMemo(
     () => [
+      /**
+       * Spalten-Architektur erklärt (Aktive Tasks Version)
+       * ==================================================
+       * 
+       * Diese Spalten "fokussieren" auf aktive Tasks:
+       * - Benutzer müssen Titel, Status, Priorität + Datum kennen
+       * - Besitzer ist NICHT wichtig (User sehen nur ihre eigenen + Admin sieht alle)
+       * - Gelösch-Datum ist nicht relevant (es gibt keine!)
+       * 
+       * Vergleich mit papierkorb.jsx:
+       * ============================
+       * 
+       * Beide Routes: Titel, Status
+       * 
+       * Aufgaben (aktiv):    Priorität, Fällig am,     Zugewiesen an
+       * Papierkorb (trash):  Besitzer,  Gelöscht am,   (nicht relevant)
+       * 
+       * Aktionen:
+       * Aufgaben:   [✏️ Bearbeiten] [🗑️ Soft Delete]
+       * Papierkorb: [↩️ Restore]    [🗑️ Hard Delete]
+       * 
+       * Warum diese Unterscheidung?
+       * ===========================
+       * 1. Aktive Tasks: User wollen sie bearbeiten/löschen
+       * 2. Gelöschte Tasks: User wollen sie wiederherstellen
+       * 3. Ampel-Prinzip: Bearbeiten = Grün (produktiv)
+       *                    Löschen = Rot (nur wenn nötig)
+       *                    Restore = Blau (Notfall-Recovery)
+       * 
+       * Die TABLE-RENDERING-LOGIK ist identisch!
+       * Nur die columns-Config (JS Objects) unterscheiden sich.
+       */
       {
         accessorKey: 'id',
         header: 'Nr.',
@@ -331,9 +456,9 @@ function AufgabenPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => deleteTask(row.original.id)}
+                    onClick={() => handleDeleteTask(row.original.id)}
                     className="text-red-600 hover:text-red-800"
-                    aria-label="Aufgabe löschen"
+                    aria-label="Aufgabe in Papierkorb verschieben"
                   >
                     <Trash2 size={16} />
                   </button>
@@ -613,44 +738,7 @@ function AufgabenPage() {
         </div>
       )}
 
-      {/* Modal: Löschen bestätigen (nur Admin) */}
-      {isAdmin && isDeleteOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" onClick={cancelDelete} />
-          <div className="relative bg-white w-full max-w-md rounded-lg shadow-xl border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-lg font-semibold text-gray-900">Aufgabe löschen?</h3>
-              <button
-                type="button"
-                onClick={cancelDelete}
-                className="p-1 text-gray-500 hover:text-gray-700"
-                aria-label="Schließen"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <p className="text-sm text-gray-600 mb-6">
-              Diese Aktion kann nicht rückgängig gemacht werden. Möchtest du die Aufgabe wirklich löschen?
-            </p>
-            <div className="flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={cancelDelete}
-                className="px-4 py-2 text-sm border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-              >
-                Abbrechen
-              </button>
-              <button
-                type="button"
-                onClick={confirmDelete}
-                className="px-4 py-2 text-sm bg-red-600 text-white rounded-md hover:bg-red-700"
-              >
-                Löschen
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+
     </div>
   );
 }
