@@ -111,7 +111,7 @@ function AufgabenPage() {
   // Mock-Liste der Benutzer für "Zugewiesen an"
   const userOptions = [
     'Admin',
-    'Nutzer123',
+    'user',
     'Erika Musterfrau',
     'Max Mustermann',
     'Jon Doe',
@@ -147,7 +147,7 @@ function AufgabenPage() {
     const numericValue = Number(value);
     if (!Number.isNaN(numericValue)) {
       if (numericValue === 1) return 'Admin';
-      if (numericValue === 2) return 'Nutzer123';
+      if (numericValue === 2) return 'user';
       return `User ${numericValue}`;
     }
     return value;

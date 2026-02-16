@@ -144,7 +144,7 @@ function PapierkorbPage() {
 
   function getOwnerName(ownerId) {
     if (ownerId === 1) return 'Admin';
-    if (ownerId === 2) return 'Nutzer123';
+    if (ownerId === 2) return 'user';
     return `User ${ownerId}`;
   }
 

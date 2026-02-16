@@ -23,24 +23,15 @@ import { getSessionInfo } from './auth-functions';
  * =================================================
  * 
  * filterType = "all":
- * - ALLE logged-in User sehen ALL non-deleted Tasks (is_deleted = 0)
- * - Admin: sieht ALLE
- * - User: sieht ALLE (nicht nur ihre eigenen!)
- * - Grund: Zusammenarbeit - User muessen die Aufgaben anderer sehen
+ * - Admin: sieht ALLE non-deleted Tasks (is_deleted = 0)
+ * - User: sieht NUR Tasks, die ihm zugewiesen sind (assigned_to = username)
  * 
  * filterType = "my":
- * - User sehen NUR ihre EIGENEN non-deleted Tasks
- * - is_deleted = 0 AND owner_id = session.userId
- * - Admin: sieht immer noch ALLE (Admin ist ein "Super-User")
+ * - User: identisch zu "all" (nur eigene Zuweisungen)
+ * - Admin: sieht weiterhin ALLE
  * 
- * Warum diese Split?
- * ==================
- * "All Tasks" = Transparent / Collaboration (wer arbeitet woran?)
- * "My Tasks" = Personalisiert (mein To-Do)
- * 
- * Keine Admin-Beschraenkung fuer "All Tasks":
- * User duerfen NICHT zwischen Tabs unterscheiden (Sicherheit bleibt gleich)
- * Nur der OWNER darf EDIT/DELETE, nicht nur weil man es sieht!
+ * Hintergrund:
+ * User sollen keine Tasks sehen, die anderen (z.B. Admin) zugewiesen sind.
  */
 export const getTasksForList = createServerFn({ method: 'POST' })
   .inputValidator((data) => data)
@@ -66,26 +57,14 @@ export const getTasksForList = createServerFn({ method: 'POST' })
       );
     }
 
-    // ===== USER: Filter-abhaengig =====
-    if (filterType === 'my') {
-      // "Meine Aufgaben" - nur die des aktuellen Users
-      return all(
-        db,
-        `SELECT id, title, status, priority, due_date AS dueDate, owner_id, assigned_to AS assignee
-         FROM tasks
-         WHERE is_deleted = 0 AND owner_id = ?
-         ORDER BY id ASC`,
-        [Number(session.userId)]
-      );
-    }
-
-    // Default: "all" - alle Tasks fuer alle User
+    // ===== USER: Nur Tasks, die dem User zugewiesen sind =====
     return all(
       db,
       `SELECT id, title, status, priority, due_date AS dueDate, owner_id, assigned_to AS assignee
        FROM tasks
-       WHERE is_deleted = 0
-       ORDER BY id ASC`
+       WHERE is_deleted = 0 AND assigned_to = ?
+       ORDER BY id ASC`,
+      [session.username]
     );
   });
 

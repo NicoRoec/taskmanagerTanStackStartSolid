@@ -14,6 +14,11 @@ const config = defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  server: {
+    watch: {
+      ignored: ['**/data/**'],
+    },
+  },
   plugins: [
     devtools({ eventBusConfig: { port: 42070 } }),
     nitro(),

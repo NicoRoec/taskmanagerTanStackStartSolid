@@ -87,6 +87,15 @@ async function migrateAddAssignedTo(db) {
   }
 }
 
+async function migrateAssigneeUserName(db) {
+  await run(
+    db,
+    `UPDATE tasks
+     SET assigned_to = 'user'
+     WHERE assigned_to = 'Nutzer123'`
+  );
+}
+
 async function seedTasksIfEmpty(db) {
   const countRow = await get(db, 'SELECT COUNT(*) as count FROM tasks');
   if (countRow && countRow.count > 0) return;
@@ -95,7 +104,7 @@ async function seedTasksIfEmpty(db) {
   await run(
     db,
     'INSERT INTO tasks (title, status, priority, due_date, owner_id, assigned_to) VALUES (?, ?, ?, ?, ?, ?)',
-    ['Mockup erstellen', 'in Arbeit', 'Mittel', '2026-03-31', 2, 'Nutzer123']
+    ['Mockup erstellen', 'in Arbeit', 'Mittel', '2026-03-31', 2, 'user']
   );
   await run(
     db,
@@ -126,6 +135,7 @@ export async function getDb() {
       const db = await openDb();
       await initSchema(db);
       await migrateAddAssignedTo(db);
+      await migrateAssigneeUserName(db);
       await seedTasksIfEmpty(db);
       return db;
     })();
