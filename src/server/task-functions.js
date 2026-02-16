@@ -11,36 +11,81 @@ import { getSessionInfo } from './auth-functions';
  * der Client keine SQL-Queries sehen oder umgehen.
  */
 
+/**
+ * Hole Tasks für die Hauptliste mit steuerbarem Filter
+ * 
+ * TanStack Router + Loader:
+ * =========================
+ * Diese Server Function wird vom Loader der aufgaben.jsx Route aufgerufen.
+ * Der Loader laeuft VOR dem Render und fuellt die initiale Datenliste.
+ * 
+ * Sichtbarkeits-Regeln (serverseitig durchgesetzt):
+ * =================================================
+ * 
+ * filterType = "all":
+ * - ALLE logged-in User sehen ALL non-deleted Tasks (is_deleted = 0)
+ * - Admin: sieht ALLE
+ * - User: sieht ALLE (nicht nur ihre eigenen!)
+ * - Grund: Zusammenarbeit - User muessen die Aufgaben anderer sehen
+ * 
+ * filterType = "my":
+ * - User sehen NUR ihre EIGENEN non-deleted Tasks
+ * - is_deleted = 0 AND owner_id = session.userId
+ * - Admin: sieht immer noch ALLE (Admin ist ein "Super-User")
+ * 
+ * Warum diese Split?
+ * ==================
+ * "All Tasks" = Transparent / Collaboration (wer arbeitet woran?)
+ * "My Tasks" = Personalisiert (mein To-Do)
+ * 
+ * Keine Admin-Beschraenkung fuer "All Tasks":
+ * User duerfen NICHT zwischen Tabs unterscheiden (Sicherheit bleibt gleich)
+ * Nur der OWNER darf EDIT/DELETE, nicht nur weil man es sieht!
+ */
 export const getTasksForList = createServerFn({ method: 'POST' })
   .inputValidator((data) => data)
   .handler(async ({ data }) => {
     const session = await getSessionInfo({ data: { sessionId: data.sessionId || null } });
 
-    // Ownership-Check MUSS serverseitig passieren, sonst koennte der Client
-    // die Filterung umgehen und fremde Tasks sehen.
+    // Keine Session = Keine Tasks
     if (!session?.authenticated) {
       return [];
     }
 
     const db = await getDb();
+    const filterType = data.filterType || 'all'; // Default: "all"
 
+    // ===== ADMIN: Sieht IMMER alles (unabhaengig vom Filter) =====
     if (session.role === 'admin') {
       return all(
         db,
-        `SELECT id, title, status, priority, due_date AS dueDate, owner_id AS assignee
+        `SELECT id, title, status, priority, due_date AS dueDate, owner_id, owner_id AS assignee
          FROM tasks
          WHERE is_deleted = 0
          ORDER BY id ASC`
       );
     }
 
+    // ===== USER: Filter-abhaengig =====
+    if (filterType === 'my') {
+      // "Meine Aufgaben" - nur die des aktuellen Users
+      return all(
+        db,
+        `SELECT id, title, status, priority, due_date AS dueDate, owner_id, owner_id AS assignee
+         FROM tasks
+         WHERE is_deleted = 0 AND owner_id = ?
+         ORDER BY id ASC`,
+        [Number(session.userId)]
+      );
+    }
+
+    // Default: "all" - alle Tasks fuer alle User
     return all(
       db,
-      `SELECT id, title, status, priority, due_date AS dueDate, owner_id AS assignee
+      `SELECT id, title, status, priority, due_date AS dueDate, owner_id, owner_id AS assignee
        FROM tasks
-       WHERE is_deleted = 0 AND owner_id = ?
-       ORDER BY id ASC`,
-      [Number(session.userId)]
+       WHERE is_deleted = 0
+       ORDER BY id ASC`
     );
   });
 
@@ -189,6 +234,23 @@ export const updateTask = createServerFn({ method: 'POST' })
       if (!task) {
         return { success: false, error: 'Task nicht gefunden' };
       }
+
+      /**
+       * Sicherheit: Geloeschte Tasks duerfen NICHT edited werden!
+       * ==========================================================
+       * 
+       * Warum Server-Side Check?
+       * ========================
+       * Der Client koennte die is_deleted Flag ignorieren.
+       * Deshalb pruefen wir auf dem Server: die Task muss is_deleted=0 sein.
+       * 
+       * Die WHERE-Klausel oben ("is_deleted = 0") erzwingt das:
+       * Wenn Task geloesch (is_deleted=1), wird sie NICHT gefunden.
+       * => Update schlaegt fehl (Safe by Default)
+       * 
+       * Grund: Geloeschte Tasks sind "archived" - nicht bearbeitbar.
+       * Nur im Papierkorb sichtbar zur Restore/Delete.
+       */
 
       // ===== OWNERSHIP CHECK (Autorisierung) =====
       // Admin darf alles, User nur ihre eigenen Tasks

@@ -106,6 +106,7 @@ function AufgabenPage() {
   const loaderData = Route.useLoaderData() || { tasks: [] };
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState(null);
+  const [selectedTab, setSelectedTab] = useState('all');
 
   // Mock-Liste der Benutzer für "Zugewiesen an"
   const userOptions = [
@@ -165,7 +166,7 @@ function AufgabenPage() {
       }
 
       const nextTasks = await getTasksForList({
-        data: { sessionId: session.sessionId },
+        data: { sessionId: session.sessionId, filterType: selectedTab },
       });
 
       if (!isActive) return;
@@ -182,7 +183,7 @@ function AufgabenPage() {
     return () => {
       isActive = false;
     };
-  }, [session?.sessionId]);
+  }, [session?.sessionId, selectedTab]);
 
   /**
    * TanStack Form – wie funktioniert es hier?
@@ -317,7 +318,11 @@ function AufgabenPage() {
   }
 
   function openEditForm(task) {
-    if (!isAdmin) return;
+    // Nur Admin darf editieren
+    if (!isAdmin) {
+      alert('Nur Administratoren dürfen Aufgaben bearbeiten.');
+      return;
+    }
     setEditingTaskId(task.id);
     form.setFieldValue('title', task.title);
     form.setFieldValue('status', task.status);
@@ -327,8 +332,19 @@ function AufgabenPage() {
     setIsFormOpen(true);
   }
 
-  async function handleDeleteTask(taskId) {
-    if (!isAdmin || !session?.sessionId) return;
+  async function handleDeleteTask(taskId, task) {
+    if (!session?.sessionId) return;
+
+    // Ownership-Check: Admin oder Task-Owner darf loeschen
+    let isOwner = false;
+    if (session?.userId && task?.owner_id) {
+      isOwner = Number(session.userId) === Number(task.owner_id);
+    }
+
+    if (!isAdmin && !isOwner) {
+      alert('Du darfst nur deine eigenen Aufgaben löschen.');
+      return;
+    }
 
     try {
       // Soft Delete: Task wird in Papierkorb verschoben (is_deleted = 1)
@@ -439,37 +455,64 @@ function AufgabenPage() {
         accessorKey: 'assignee',
         header: 'Zugewiesen an',
       },
-      ...(isAdmin
-        ? [
-            {
-              id: 'actions',
-              header: 'Aktionen',
-              cell: ({ row }) => (
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => openEditForm(row.original)}
-                    className="text-blue-600 hover:text-blue-800"
-                    aria-label="Aufgabe bearbeiten"
-                  >
-                    <PenSquare size={16} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteTask(row.original.id)}
-                    className="text-red-600 hover:text-red-800"
-                    aria-label="Aufgabe in Papierkorb verschieben"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              ),
-              size: 120,
-            },
-          ]
-        : []),
+      {
+        id: 'actions',
+        header: 'Aktionen',
+        cell: ({ row }) => {
+          /**
+           * Row-Level Permissions für Actions
+           * ==================================
+           * 
+           * Edit [✏️]: NUR Admin (normalUser sieht Button nicht)
+           * Delete [🗑️]: Admin oder Task-Owner
+           * 
+           * Diese UI-Checks sind REDUNDANT mit Server-Side Checks,
+           * aber bessere UX (keine disabled-Buttons, einfach verstecken).
+           * 
+           * Server-Side Enforcement in updateTask/deleteTask:
+           * - updateTask: WHERE is_deleted = 0 + owner_id Check
+           * - deleteTask: owner_id Check (admin bypass)
+           */
+          // Ownership-Check: Aktueller User ist Besitzer dieser Task?
+          let isOwner = false;
+          if (session?.userId && row.original?.owner_id) {
+            isOwner = Number(session.userId) === Number(row.original.owner_id);
+          }
+
+          // Edit: Nur Admin
+          const canEdit = isAdmin;
+          // Delete: Admin oder Owner
+          const canDelete = isAdmin || isOwner;
+
+          return (
+            <div className="flex items-center gap-3">
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => openEditForm(row.original)}
+                  className="text-blue-600 hover:text-blue-800"
+                  aria-label="Aufgabe bearbeiten"
+                >
+                  <PenSquare size={16} />
+                </button>
+              )}
+              {canDelete && (
+                <button
+                  type="button"
+                  onClick={() => handleDeleteTask(row.original.id, row.original)}
+                  className="text-red-600 hover:text-red-800"
+                  aria-label="Aufgabe in Papierkorb verschieben"
+                >
+                  <Trash2 size={16} />
+                </button>
+              )}
+            </div>
+          );
+        },
+        size: 120,
+      },
     ],
-    [isAdmin]
+    [isAdmin, session]
   );
 
   // Sortier-State
@@ -495,12 +538,26 @@ function AufgabenPage() {
           <h2 className="text-lg font-semibold text-gray-700">Aufgabenliste</h2>
         </div>
         
-        {/* Filter Tabs */}
+        {/* Filter Tabs - Visibility Control */}
         <div className="flex gap-6 text-sm">
-          <button className="text-gray-900 font-medium border-b-2 border-gray-900 pb-1">
+          <button
+            onClick={() => setSelectedTab('all')}
+            className={`pb-1 ${
+              selectedTab === 'all'
+                ? 'text-gray-900 font-medium border-b-2 border-gray-900'
+                : 'text-gray-500 hover:text-gray-900'
+            }`}
+          >
             Alle Aufgaben
           </button>
-          <button className="text-gray-500 hover:text-gray-900 pb-1">
+          <button
+            onClick={() => setSelectedTab('my')}
+            className={`pb-1 ${
+              selectedTab === 'my'
+                ? 'text-gray-900 font-medium border-b-2 border-gray-900'
+                : 'text-gray-500 hover:text-gray-900'
+            }`}
+          >
             Meine Aufgaben
           </button>
         </div>
