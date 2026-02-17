@@ -77,6 +77,79 @@ export const getTasksForList = createServerFn({ method: 'POST' })
   });
 
 /**
+ * Dashboard-Daten aus der Datenbank
+ * =================================
+ *
+ * Liefert:
+ * - Statistiken nach Status (Neu, in Arbeit, Erledigt)
+ * - Kürzliche Aktivitäten (zuletzt aktualisierte Tasks)
+ *
+ * Sichtbarkeit:
+ * - Admin: sieht alle nicht gelöschten Tasks
+ * - User: sieht nur zugewiesene nicht gelöschte Tasks
+ */
+export const getDashboardData = createServerFn({ method: 'POST' })
+  .inputValidator((data) => data)
+  .handler(async ({ data }) => {
+    const session = await getSessionInfo({ data: { sessionId: data.sessionId || null } });
+
+    if (!session?.authenticated) {
+      return {
+        stats: {
+          open: 0,
+          inProgress: 0,
+          done: 0,
+        },
+        activities: [],
+      };
+    }
+
+    const db = await getDb();
+
+    let whereClause = 'WHERE is_deleted = 0';
+    const params = [];
+
+    if (session.role !== 'admin') {
+      whereClause += ' AND lower(assigned_to) = lower(?)';
+      params.push(session.username);
+    }
+
+    const statsRow = await get(
+      db,
+      `SELECT
+         SUM(CASE WHEN status = 'Neu' THEN 1 ELSE 0 END) AS open,
+         SUM(CASE WHEN status = 'in Arbeit' THEN 1 ELSE 0 END) AS inProgress,
+         SUM(CASE WHEN status = 'Erledigt' THEN 1 ELSE 0 END) AS done
+       FROM tasks
+       ${whereClause}`,
+      params
+    );
+
+    const activities = await all(
+      db,
+      `SELECT
+         id,
+         title,
+         status,
+         updated_at AS updatedAt
+       FROM tasks
+       ${whereClause}
+       ORDER BY datetime(updated_at) DESC
+       LIMIT 6`,
+      params
+    );
+
+    return {
+      stats: {
+        open: Number(statsRow?.open || 0),
+        inProgress: Number(statsRow?.inProgress || 0),
+        done: Number(statsRow?.done || 0),
+      },
+      activities: activities || [],
+    };
+  });
+
+/**
  * Erstelle eine neue Task
  * 
  * TanStack Server Function Boundary:
