@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, Link, useNavigate } from '@tanstack/react-router';
-import { LayoutDashboard, ListTodo, Trash2, Users, FolderKanban, LogOut, LogIn, Moon, Sun } from 'lucide-react';
+import { LayoutDashboard, ListTodo, Trash2, Users, LogOut, LogIn, Moon, Sun } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from './__root';
 import { useTheme } from './__root';
@@ -191,13 +191,6 @@ function LayoutComponent() {
             >
               <Users size={18} />
               <span>Nutzer verwalten</span>
-            </Link>
-            <Link
-              to="/admin/projekt"
-              className="flex items-center gap-3 px-3 py-2 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors w-full text-left text-sm [&.active]:bg-blue-500 [&.active]:text-white"
-            >
-              <FolderKanban size={18} />
-              <span>Projekt verwalten</span>
             </Link>
           </div>
         )}
