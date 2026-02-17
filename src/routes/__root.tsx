@@ -12,11 +12,11 @@ import TanStackQueryDevtools from "../integrations/tanstack-query/devtools";
 import * as TanstackQuery from "../integrations/tanstack-query/root-provider";
 
 import StoreDevtools from "../lib/demo-store-devtools";
-import { 
-  themeStore, 
-  initializeThemeStore, 
+import {
+  themeStore,
+  initializeThemeStore,
   toggleDarkMode,
-  watchSystemThemePreference
+  watchSystemThemePreference,
 } from "../lib/theme-store";
 
 import appCss from "../styles.css?url";
@@ -41,29 +41,28 @@ import { getSessionInfo, logoutUser } from "../server/auth-functions";
 /**
  * Theme-Hook für Dark Mode
  * ========================
- * 
+ *
  * Erlaubt alle Komponenten, den aktuellen Theme-Status zu lesen
  * und zwischen Light/Dark Mode umzuschalten.
- * 
+ *
  * Verwendung in Komponenten:
  * -------------------------
  * const { isDarkMode, toggleTheme } = useTheme()
- * 
+ *
  * // Liest aktuellen Dark Mode Status
  * console.log(isDarkMode)
- * 
+ *
  * // Toggelt Dark Mode an/aus
  * onClick={() => toggleTheme()}
  */
 export function useTheme() {
-  const isDarkMode = useStore(themeStore, (state) => state.darkMode)
+  const isDarkMode = useStore(themeStore, (state) => state.darkMode);
 
   return {
     isDarkMode,
     toggleTheme: toggleDarkMode,
-  }
+  };
 }
-
 
 export interface AuthContextType {
   session: {
@@ -236,7 +235,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <html lang="en" className={isDarkMode ? 'dark' : ''}>
+    <html lang="en" className={isDarkMode ? "dark" : ""}>
       <head>
         <HeadContent />
       </head>

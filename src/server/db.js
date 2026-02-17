@@ -61,6 +61,18 @@ function all(db, sql, params = []) {
 async function initSchema(db) {
   await run(
     db,
+    `CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL UNIQUE,
+      role TEXT NOT NULL CHECK (role IN ('admin', 'user')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`
+  );
+
+  await run(
+    db,
     `CREATE TABLE IF NOT EXISTS tasks (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT NOT NULL,
@@ -128,6 +140,31 @@ async function seedTasksIfEmpty(db) {
   );
 }
 
+async function seedUsersIfEmpty(db) {
+  const countRow = await get(db, 'SELECT COUNT(*) as count FROM users');
+  if (countRow && countRow.count > 0) return;
+
+  await run(
+    db,
+    `INSERT INTO users (name, email, role)
+     VALUES (?, ?, ?), (?, ?, ?), (?, ?, ?), (?, ?, ?)`,
+    [
+      'Admin',
+      'admin@example.com',
+      'admin',
+      'user',
+      'user@example.com',
+      'user',
+      'Max Mustermann',
+      'max@example.com',
+      'admin',
+      'Erika Musterfrau',
+      'erika@example.com',
+      'user',
+    ]
+  );
+}
+
 export async function getDb() {
   if (!dbPromise) {
     dbPromise = (async () => {
@@ -136,6 +173,7 @@ export async function getDb() {
       await initSchema(db);
       await migrateAddAssignedTo(db);
       await migrateAssigneeUserName(db);
+      await seedUsersIfEmpty(db);
       await seedTasksIfEmpty(db);
       return db;
     })();
