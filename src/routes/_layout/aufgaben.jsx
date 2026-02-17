@@ -3,6 +3,7 @@ import { Plus, ArrowUpDown, ArrowUp, ArrowDown, PenSquare, Trash2, X, Search } f
 import { useMemo, useState, useCallback, useRef } from 'react';
 import { useForm } from '@tanstack/react-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { useAuth } from '../__root';
 import { useSearch } from '@tanstack/react-router';
 import { z } from 'zod';
@@ -619,6 +620,31 @@ function AufgabenPage() {
     getSortedRowModel: getSortedRowModel(),
   });
 
+  /**
+   * TanStack Virtual für lange Listen
+   * =================================
+   *
+   * Problem ohne Virtualisierung:
+   * - Bei 1000+ Zeilen rendert React ALLE Rows gleichzeitig.
+   * - Das kostet Zeit/Memory und macht Scrollen träge.
+   *
+   * Lösung mit useVirtualizer:
+   * - Es werden nur sichtbare Rows (+ Overscan) gerendert.
+   * - Nicht sichtbare Rows bleiben "virtuell" und belegen nur Höhe.
+   * - Ergebnis: flüssiges Scrollen auch bei sehr großen Tabellen.
+   */
+  const [tableContainerElement, setTableContainerElement] = useState(null);
+  const rows = table.getRowModel().rows;
+
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => tableContainerElement,
+    estimateSize: () => 52,
+    overscan: 12,
+  });
+
+  const virtualRows = rowVirtualizer.getVirtualItems();
+
   return (
     <div className="h-full">
       {/* Header Bereich */}
@@ -681,7 +707,7 @@ function AufgabenPage() {
         </div>
       </div>
 
-      {/* TanStack Table */}
+      {/* TanStack Table + TanStack Virtual */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
         <table className="w-full">
           <thead className="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
@@ -717,21 +743,70 @@ function AufgabenPage() {
               </tr>
             ))}
           </thead>
-          <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-            {table.getRowModel().rows.map((row) => (
-              <tr
-                key={row.id}
-                className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer"
-              >
-                {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
         </table>
+
+        <div
+          ref={setTableContainerElement}
+          className="max-h-[60vh] overflow-auto"
+        >
+          <table className="w-full">
+            <tbody>
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={table.getAllColumns().length} className="px-6 py-6 text-sm text-gray-500 dark:text-gray-400">
+                    Keine Aufgaben gefunden.
+                  </td>
+                </tr>
+              ) : (
+                <>
+                  {virtualRows.length > 0 && virtualRows[0].start > 0 && (
+                    <tr>
+                      <td
+                        colSpan={table.getAllColumns().length}
+                        style={{ height: `${virtualRows[0].start}px` }}
+                      />
+                    </tr>
+                  )}
+
+                  {(virtualRows.length > 0 ? virtualRows : rows.slice(0, 30).map((_, index) => ({ index }))).map((virtualRowLike) => {
+                    const row = rows[virtualRowLike.index];
+                    if (!row) return null;
+
+                    return (
+                      <tr
+                        key={row.id}
+                        data-index={virtualRowLike.index}
+                        ref={virtualRows.length > 0 ? rowVirtualizer.measureElement : undefined}
+                        className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer border-b border-gray-200 dark:border-gray-700"
+                      >
+                        {row.getVisibleCells().map((cell) => (
+                          <td key={cell.id} className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })}
+
+                  {virtualRows.length > 0 &&
+                    rowVirtualizer.getTotalSize() - virtualRows[virtualRows.length - 1].end > 0 && (
+                      <tr>
+                        <td
+                          colSpan={table.getAllColumns().length}
+                          style={{
+                            height: `${
+                              rowVirtualizer.getTotalSize() -
+                              virtualRows[virtualRows.length - 1].end
+                            }px`,
+                          }}
+                        />
+                      </tr>
+                    )}
+                </>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Info-Text über die Tabelle */}

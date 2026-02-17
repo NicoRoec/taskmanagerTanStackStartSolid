@@ -140,6 +140,60 @@ async function seedTasksIfEmpty(db) {
   );
 }
 
+async function seedVirtualDemoTasksIfNeeded(db) {
+  /**
+   * TanStack Virtual Demo-Daten
+   * ===========================
+   *
+   * Für Virtualisierung brauchen wir viele Datensätze. Deshalb erzeugen wir
+   * einmalig 1200 zusätzliche Tasks mit Prefix "[VIRTUAL DEMO]".
+   *
+   * Warum?
+   * - Mit wenigen Rows ist der Performance-Unterschied kaum sichtbar.
+   * - Ab 1000+ Rows zeigt TanStack Virtual klaren Mehrwert.
+   */
+  const targetCount = 1200;
+  const row = await get(
+    db,
+    `SELECT COUNT(*) as count
+     FROM tasks
+     WHERE title LIKE '[VIRTUAL DEMO]%'`
+  );
+
+  const existing = Number(row?.count || 0);
+  if (existing >= targetCount) return;
+
+  const toInsert = targetCount - existing;
+  const chunkSize = 200;
+
+  for (let start = 0; start < toInsert; start += chunkSize) {
+    const currentChunkSize = Math.min(chunkSize, toInsert - start);
+    const placeholders = [];
+    const params = [];
+
+    for (let i = 0; i < currentChunkSize; i++) {
+      const index = existing + start + i + 1;
+      placeholders.push('(?, ?, ?, ?, ?, ?, ?, datetime(\'now\'), datetime(\'now\'))');
+      params.push(
+        `[VIRTUAL DEMO] Aufgabe ${index}`,
+        'Erledigt',
+        'Niedrig',
+        '2026-12-31',
+        1,
+        index % 2 === 0 ? 'Admin' : 'user',
+        0
+      );
+    }
+
+    await run(
+      db,
+      `INSERT INTO tasks (title, status, priority, due_date, owner_id, assigned_to, is_deleted, created_at, updated_at)
+       VALUES ${placeholders.join(', ')}`,
+      params
+    );
+  }
+}
+
 async function seedUsersIfEmpty(db) {
   const countRow = await get(db, 'SELECT COUNT(*) as count FROM users');
   if (countRow && countRow.count > 0) return;
@@ -175,6 +229,7 @@ export async function getDb() {
       await migrateAssigneeUserName(db);
       await seedUsersIfEmpty(db);
       await seedTasksIfEmpty(db);
+      await seedVirtualDemoTasksIfNeeded(db);
       return db;
     })();
   }
