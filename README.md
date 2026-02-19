@@ -1,290 +1,164 @@
-cdWelcome to your new TanStack app! 
+# Task Manager (TanStack Start + React)
 
-# Getting Started
+## 1) Projektüberblick
 
-To run this application:
+Dieses Repository enthält eine Fullstack-Task-Manager-Anwendung auf Basis von TanStack Start, React und SQLite. Der Schwerpunkt liegt auf einer klaren Trennung zwischen Client-UI und serverseitiger Geschäftslogik über TanStack Server Functions.
+
+Die Anwendung bietet Rollen (Admin/User), Aufgabenverwaltung mit Soft Delete (Papierkorb), Dashboard-Kennzahlen sowie einen Admin-Bereich zur Nutzerverwaltung. Obwohl im Projektkontext häufig „Solid“ erwähnt wird, ist die konkrete Implementierung hier React-basiert.
+
+## 2) Tech-Stack
+
+- Runtime/Build: Vite, TanStack Start, Nitro, Node.js
+- UI: React, Tailwind CSS, Lucide Icons
+- Datenbank: SQLite (`sqlite3`)
+- Validierung: Zod
+- Tests: Vitest
+
+### TanStack (tatsächlich genutzt)
+
+- Wir nutzen `@tanstack/react-start` für Server Functions (Auth, Task- und User-Operationen).
+- Wir nutzen `@tanstack/react-router` für file-based Routing, Navigation, Route Guards und URL-Search-State.
+- Wir nutzen `@tanstack/react-router-ssr-query` für die Integration von Router und Query-Client im SSR-Kontext.
+- Wir nutzen `@tanstack/react-query` für Datenladen, Mutationen, Caching und Invalidation.
+- Wir nutzen `@tanstack/react-form` für Form-State und Validierung (Login, Aufgaben, Admin-Nutzer).
+- Wir nutzen `@tanstack/react-table` für headless Tabellenlogik (Sortierung, Rendering, Actions).
+- Wir nutzen `@tanstack/react-virtual` für Listen-Virtualisierung in der Aufgabenansicht.
+- Wir nutzen `@tanstack/store` + `@tanstack/react-store` für globalen Theme-State (Dark/Light).
+- Wir nutzen `@tanstack/react-devtools`, `@tanstack/react-router-devtools`, `@tanstack/react-query-devtools`, `@tanstack/devtools-event-client` für Devtools-Integration.
+- Wir nutzen `@tanstack/devtools-vite` in der Vite-Konfiguration.
+
+### Installiert, aber im App-Flow nicht genutzt
+
+- `@tanstack/db`
+- `@tanstack/router-plugin`
+- `@tanstack/solid-form`
+- `@tanstack/solid-query`
+- `@tanstack/solid-table`
+- `@tanstack/match-sorter-utils` (nur in Demo-Dateien unter `src/routes/demo`)
+
+## 3) Setup & Start
+
+### Voraussetzungen
+
+- Node.js 20+
+- npm
+
+### Installation
 
 ```bash
 npm install
+```
+
+### Entwicklung starten
+
+```bash
 npm run dev
 ```
 
-# Building For Production
+Die App läuft standardmäßig auf Port `3000`.
 
-To build this application for production:
+### Build / Preview / Test
 
 ```bash
 npm run build
-```
-
-## Testing
-
-This project uses [Vitest](https://vitest.dev/) for testing. You can run the tests with:
-
-```bash
+npm run preview
 npm run test
 ```
 
-## Styling
+### Datenbank-Initialisierung / „Migrationen"
 
-This project uses [Tailwind CSS](https://tailwindcss.com/) for styling.
+Es gibt keine separaten CLI-Migrationsskripte. Stattdessen initialisiert die Anwendung beim ersten Serverzugriff automatisch:
 
+- Datenbankdatei: `data/taskmanager.db`
+- Tabellen: `users`, `tasks`
+- einfache, codebasierte Migrationsschritte (z. B. `assigned_to`)
+- Seed-Daten (Nutzer + Beispiel-Tasks + Virtualisierungs-Demo-Datensätze)
 
+Wenn du einen frischen Zustand willst, lösche `data/taskmanager.db` und starte die App neu.
 
+## 4) Nutzer & Rollen
 
-## Routing
-This project uses [TanStack Router](https://tanstack.com/router). The initial setup is a file based router. Which means that the routes are managed as files in `src/routes`.
+### Login (hartcodierte Demo-Credentials)
 
-### Adding A Route
+- Admin: `admin / admin`
+- User: `user / user`
 
-To add a new route to your application just add another a new file in the `./src/routes` directory.
+Die Login-Validierung läuft serverseitig über eine Server Function.
 
-TanStack will automatically generate the content of the route file for you.
+### Rollenmodell
 
-Now that you have two routes you can use a `Link` component to navigate between them.
+- `admin`: erweitere Rechte (z. B. Nutzerverwaltung, permanentes Löschen im Papierkorb)
+- `user`: eingeschränkte Rechte
 
-### Adding Links
+Hinweis: Zusätzlich gibt es Seed-Einträge in der `users`-Tabelle (z. B. `Max Mustermann`, `Erika Musterfrau`) für Demo-/Tabellenzwecke.
 
-To use SPA (Single Page Application) navigation you will need to import the `Link` component from `@tanstack/react-router`.
+## 5) Features
 
-```tsx
-import { Link } from "@tanstack/react-router";
-```
+- Aufgabenliste (`/aufgaben`) mit Suche (URL-gebunden), Sortierung, Erstellen, Bearbeiten, Soft Delete
+- Dashboard (`/dashboard`) mit Status-KPIs und letzten Aktivitäten
+- Papierkorb (`/papierkorb`) mit Wiederherstellen und (nur Admin) endgültigem Löschen
+- Admin-Nutzerverwaltung (`/admin/nutzer`) mit Create/Update/Delete
 
-Then anywhere in your JSX you can use it like so:
+### CRUD-Verhalten inkl. Papierkorb
 
-```tsx
-<Link to="/about">About</Link>
-```
+- Create: neue Task wird in `tasks` geschrieben (`is_deleted = 0`)
+- Read: aktive Liste filtert auf `is_deleted = 0`
+- Update: nur für aktive Tasks; gelöschte Tasks sind nicht editierbar
+- Delete (soft): setzt `is_deleted = 1` (Papierkorb)
+- Restore: setzt `is_deleted = 0`
+- Permanent Delete: entfernt Datensatz physisch aus DB (nur Admin)
 
-This will create a link that will navigate to the `/about` route.
+## 6) Datenmodell
 
-More information on the `Link` component can be found in the [Link documentation](https://tanstack.com/router/v1/docs/framework/react/api/router/linkComponent).
+### Tabelle `users`
 
-### Using A Layout
+- `id` (PK)
+- `name` (unique fachlich, technisch nicht als Constraint)
+- `email` (UNIQUE)
+- `role` (`admin` | `user`)
+- `created_at`, `updated_at`
 
-In the File Based Routing setup the layout is located in `src/routes/__root.tsx`. Anything you add to the root route will appear in all the routes. The route content will appear in the JSX where you use the `<Outlet />` component.
+### Tabelle `tasks`
 
-Here is an example layout that includes a header:
+- `id` (PK)
+- `title`, `status`, `priority`, `due_date`
+- `owner_id` (Ersteller)
+- `assigned_to` (Name des zuständigen Nutzers)
+- `is_deleted` (`0` aktiv, `1` Papierkorb)
+- `created_at`, `updated_at`
 
-```tsx
-import { Outlet, createRootRoute } from '@tanstack/react-router'
-import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
+## 7) Architektur
 
-import { Link } from "@tanstack/react-router";
+### Routing
 
-export const Route = createRootRoute({
-  component: () => (
-    <>
-      <header>
-        <nav>
-          <Link to="/">Home</Link>
-          <Link to="/about">About</Link>
-        </nav>
-      </header>
-      <Outlet />
-      <TanStackRouterDevtools />
-    </>
-  ),
-})
-```
+- File-based Routing unter `src/routes`
+- Root + Layout-Struktur mit geschütztem Bereich (`/_layout/...`)
+- Guards über `beforeLoad` (z. B. Admin-Bereich)
+- URL-Search-State für Aufgaben-Suche (`q`)
 
-The `<TanStackRouterDevtools />` component is not required so you can remove it if you don't want it in your layout.
+### Server Functions
 
-More information on layouts can be found in the [Layouts documentation](https://tanstack.com/router/latest/docs/framework/react/guide/routing-concepts#layouts).
+- Auth: Login, Logout, Session-Info
+- Tasks: Listen, Dashboard, Create, Update, Soft Delete, Restore, Permanent Delete
+- Users: Admin-CRUD
 
+### Form/Table/Query Zusammenspiel
 
-## Data Fetching
+- `react-form` steuert Eingaben + Validierung
+- `react-query` lädt Daten und führt Mutationen aus
+- `react-table` rendert Tabellenlogik headless
+- `react-virtual` optimiert große Tasklisten
 
-There are multiple ways to fetch data in your application. You can use TanStack Query to fetch data from a server. But you can also use the `loader` functionality built into TanStack Router to load the data for a route before it's rendered.
+## 8) Sicherheitsregeln
 
-For example:
+- Autorisierung wird serverseitig geprüft (nicht nur UI-seitig)
+- Admin-Routen prüfen Rolle via Guard (`beforeLoad`)
+- Task-Operationen prüfen Session und Ownership-/Assignee-Regeln
+- Bearbeiten von Papierkorb-Tasks ist serverseitig blockiert (`is_deleted = 0` Voraussetzung für Update)
 
-```tsx
-const peopleRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/people",
-  loader: async () => {
-    const response = await fetch("https://swapi.dev/api/people");
-    return response.json() as Promise<{
-      results: {
-        name: string;
-      }[];
-    }>;
-  },
-  component: () => {
-    const data = peopleRoute.useLoaderData();
-    return (
-      <ul>
-        {data.results.map((person) => (
-          <li key={person.name}>{person.name}</li>
-        ))}
-      </ul>
-    );
-  },
-});
-```
+Wichtige Einschränkungen der aktuellen Demo-Sicherheit:
 
-Loaders simplify your data fetching logic dramatically. Check out more information in the [Loader documentation](https://tanstack.com/router/latest/docs/framework/react/guide/data-loading#loader-parameters).
-
-### React-Query
-
-React-Query is an excellent addition or alternative to route loading and integrating it into you application is a breeze.
-
-First add your dependencies:
-
-```bash
-npm install @tanstack/react-query @tanstack/react-query-devtools
-```
-
-Next we'll need to create a query client and provider. We recommend putting those in `main.tsx`.
-
-```tsx
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-
-// ...
-
-const queryClient = new QueryClient();
-
-// ...
-
-if (!rootElement.innerHTML) {
-  const root = ReactDOM.createRoot(rootElement);
-
-  root.render(
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>
-  );
-}
-```
-
-You can also add TanStack Query Devtools to the root route (optional).
-
-```tsx
-import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-
-const rootRoute = createRootRoute({
-  component: () => (
-    <>
-      <Outlet />
-      <ReactQueryDevtools buttonPosition="top-right" />
-      <TanStackRouterDevtools />
-    </>
-  ),
-});
-```
-
-Now you can use `useQuery` to fetch your data.
-
-```tsx
-import { useQuery } from "@tanstack/react-query";
-
-import "./App.css";
-
-function App() {
-  const { data } = useQuery({
-    queryKey: ["people"],
-    queryFn: () =>
-      fetch("https://swapi.dev/api/people")
-        .then((res) => res.json())
-        .then((data) => data.results as { name: string }[]),
-    initialData: [],
-  });
-
-  return (
-    <div>
-      <ul>
-        {data.map((person) => (
-          <li key={person.name}>{person.name}</li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-export default App;
-```
-
-You can find out everything you need to know on how to use React-Query in the [React-Query documentation](https://tanstack.com/query/latest/docs/framework/react/overview).
-
-## State Management
-
-Another common requirement for React applications is state management. There are many options for state management in React. TanStack Store provides a great starting point for your project.
-
-First you need to add TanStack Store as a dependency:
-
-```bash
-npm install @tanstack/store
-```
-
-Now let's create a simple counter in the `src/App.tsx` file as a demonstration.
-
-```tsx
-import { useStore } from "@tanstack/react-store";
-import { Store } from "@tanstack/store";
-import "./App.css";
-
-const countStore = new Store(0);
-
-function App() {
-  const count = useStore(countStore);
-  return (
-    <div>
-      <button onClick={() => countStore.setState((n) => n + 1)}>
-        Increment - {count}
-      </button>
-    </div>
-  );
-}
-
-export default App;
-```
-
-One of the many nice features of TanStack Store is the ability to derive state from other state. That derived state will update when the base state updates.
-
-Let's check this out by doubling the count using derived state.
-
-```tsx
-import { useStore } from "@tanstack/react-store";
-import { Store, Derived } from "@tanstack/store";
-import "./App.css";
-
-const countStore = new Store(0);
-
-const doubledStore = new Derived({
-  fn: () => countStore.state * 2,
-  deps: [countStore],
-});
-doubledStore.mount();
-
-function App() {
-  const count = useStore(countStore);
-  const doubledCount = useStore(doubledStore);
-
-  return (
-    <div>
-      <button onClick={() => countStore.setState((n) => n + 1)}>
-        Increment - {count}
-      </button>
-      <div>Doubled - {doubledCount}</div>
-    </div>
-  );
-}
-
-export default App;
-```
-
-We use the `Derived` class to create a new store that is derived from another store. The `Derived` class has a `mount` method that will start the derived store updating.
-
-Once we've created the derived store we can use it in the `App` component just like we would any other store using the `useStore` hook.
-
-You can find out everything you need to know on how to use TanStack Store in the [TanStack Store documentation](https://tanstack.com/store/latest).
-
-# Demo files
-
-Files prefixed with `demo` can be safely deleted. They are there to provide a starting point for you to play around with the features you've installed.
-
-# Learn More
-
-You can learn more about all of the offerings from TanStack in the [TanStack documentation](https://tanstack.com).
+- In-Memory Sessions (nicht persistent)
+- Demo-Credentials hardcodiert
+- Passwörter im Klartextvergleich
+- Session-Cookie wird clientseitig gesetzt, nicht als `HttpOnly`-Cookie
