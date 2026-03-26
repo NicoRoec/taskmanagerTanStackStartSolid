@@ -78,7 +78,7 @@
  * ```
  */
 
-import { createServerFn } from '@tanstack/react-start';
+import { createServerFn } from '@tanstack/solid-start';
 import { createSession, deleteSession, getSession } from './session';
 
 /**

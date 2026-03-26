@@ -1,4 +1,4 @@
-import { createServerFn } from '@tanstack/react-start'
+import { createServerFn } from '@tanstack/solid-start'
 
 export const getPunkSongs = createServerFn({
   method: 'GET',

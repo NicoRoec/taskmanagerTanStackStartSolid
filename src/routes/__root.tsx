@@ -2,16 +2,13 @@ import {
   HeadContent,
   Scripts,
   createRootRouteWithContext,
-} from "@tanstack/react-router";
-import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
-import { TanStackDevtools } from "@tanstack/react-devtools";
-import { createContext, useContext, useState, useEffect } from "react";
-import { useStore } from "@tanstack/react-store";
+} from "@tanstack/solid-router";
+import { Suspense, createContext, onMount, useContext } from "solid-js";
+import { createSignal } from "solid-js";
+import { HydrationScript } from "solid-js/web";
 
-import TanStackQueryDevtools from "../integrations/tanstack-query/devtools";
 import * as TanstackQuery from "../integrations/tanstack-query/root-provider";
 
-import StoreDevtools from "../lib/demo-store-devtools";
 import {
   themeStore,
   initializeThemeStore,
@@ -21,7 +18,6 @@ import {
 
 import appCss from "../styles.css?url";
 
-import type { QueryClient } from "@tanstack/react-query";
 import { getSessionInfo, logoutUser } from "../server/auth-functions";
 
 /**
@@ -56,28 +52,13 @@ import { getSessionInfo, logoutUser } from "../server/auth-functions";
  * onClick={() => toggleTheme()}
  */
 export function useTheme() {
-  const isDarkMode = useStore(themeStore, (state) => state.darkMode);
-
   return {
-    isDarkMode,
+    isDarkMode: themeStore.state.darkMode,
     toggleTheme: toggleDarkMode,
   };
 }
 
-export interface AuthContextType {
-  session: {
-    sessionId: string;
-    userId: string;
-    username: string;
-    role: "admin" | "user";
-  } | null;
-  isAuthenticated: boolean;
-  isAdmin: boolean;
-  logout: () => Promise<void>;
-  refreshSession: () => Promise<void>;
-}
-
-export const AuthContext = createContext<AuthContextType | null>(null);
+export const AuthContext = createContext(null);
 
 export function useAuth() {
   const context = useContext(AuthContext);
@@ -87,11 +68,7 @@ export function useAuth() {
   return context;
 }
 
-interface MyRouterContext {
-  queryClient: QueryClient;
-}
-
-export const Route = createRootRouteWithContext<MyRouterContext>()({
+export const Route = createRootRouteWithContext()({
   head: () => ({
     meta: [
       {
@@ -134,14 +111,10 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
  * 3. AuthProvider versucht Session zu laden (mit useEffect)
  * 4. Alle Kind-Komponenten können useAuth() Hook verwenden
  */
-function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [authState, setAuthState] = useState<AuthContextType>({
-    session: null,
-    isAuthenticated: false,
-    isAdmin: false,
-    logout: async () => {},
-    refreshSession: async () => {},
-  });
+function AuthProvider(props) {
+  const [session, setSession] = createSignal(null);
+  const [isAuthenticated, setIsAuthenticated] = createSignal(false);
+  const [isAdmin, setIsAdmin] = createSignal(false);
 
   function getSessionIdFromCookie() {
     if (typeof document === "undefined") return null;
@@ -152,49 +125,29 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
     return match ? decodeURIComponent(match.split("=")[1]) : null;
   }
 
-  // Beim Komponenten-Mount: Versuche, gespeicherte Session zu laden
-  useEffect(() => {
-    refreshSession();
-  }, []);
-
   async function refreshSession() {
     try {
-      // Wichtig: Session wird SERVER-seitig validiert (Cookie -> Server Function)
       const sessionId = getSessionIdFromCookie();
       const result = await getSessionInfo({ data: { sessionId } });
-
       if (!result?.authenticated) {
-        setAuthState({
-          session: null,
-          isAuthenticated: false,
-          isAdmin: false,
-          logout: handleLogout,
-          refreshSession,
-        });
+        setSession(null);
+        setIsAuthenticated(false);
+        setIsAdmin(false);
         return;
       }
-
-      setAuthState({
-        session: {
-          sessionId: result.sessionId,
-          userId: result.userId,
-          username: result.username,
-          role: result.role,
-        },
-        isAuthenticated: true,
-        isAdmin: result.role === "admin",
-        logout: handleLogout,
-        refreshSession,
+      setSession({
+        sessionId: result.sessionId,
+        userId: result.userId,
+        username: result.username,
+        role: result.role,
       });
+      setIsAuthenticated(true);
+      setIsAdmin(result.role === "admin");
     } catch (error) {
       console.error("Fehler beim Laden der Session:", error);
-      setAuthState({
-        session: null,
-        isAuthenticated: false,
-        isAdmin: false,
-        logout: handleLogout,
-        refreshSession,
-      });
+      setSession(null);
+      setIsAuthenticated(false);
+      setIsAdmin(false);
     }
   }
 
@@ -203,66 +156,59 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
       const sessionId = getSessionIdFromCookie();
       await logoutUser({ data: { sessionId } });
       document.cookie = "task_session=; Max-Age=0; path=/; samesite=lax";
-      setAuthState({
-        session: null,
-        isAuthenticated: false,
-        isAdmin: false,
-        logout: handleLogout,
-        refreshSession,
-      });
+      setSession(null);
+      setIsAuthenticated(false);
+      setIsAdmin(false);
       // Navigation zu Login-Seite erfolgt in _layout.jsx
     } catch (error) {
       console.error("Fehler beim Logout:", error);
     }
   }
 
-  const value: AuthContextType = {
-    ...authState,
+  onMount(() => {
+    refreshSession();
+  });
+
+  const value = {
+    get session() {
+      return session();
+    },
+    get isAuthenticated() {
+      return isAuthenticated();
+    },
+    get isAdmin() {
+      return isAdmin();
+    },
     logout: handleLogout,
     refreshSession,
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>{props.children}</AuthContext.Provider>
+  );
 }
 
-function RootDocument({ children }: { children: React.ReactNode }) {
-  const { queryClient } = Route.useRouteContext();
+function RootDocument(props) {
+  const queryClient = TanstackQuery.getContext().queryClient;
   const { isDarkMode } = useTheme();
 
-  useEffect(() => {
+  onMount(() => {
     initializeThemeStore();
     watchSystemThemePreference();
-  }, []);
+  });
 
   return (
     <html lang="en" className={isDarkMode ? "dark" : ""}>
       <head>
+        <HydrationScript />
         <HeadContent />
       </head>
       <body>
-        {/*
-          TanStack Query Provider
-          =======================
-          Der Provider stellt den QueryClient im React-Context bereit.
-          Ohne ihn koennen useQuery/useMutation nicht arbeiten und
-          liefern keine Daten.
-        */}
         <TanstackQuery.Provider queryClient={queryClient}>
-          <AuthProvider>{children}</AuthProvider>
+          <AuthProvider>
+            <Suspense>{props.children}</Suspense>
+          </AuthProvider>
         </TanstackQuery.Provider>
-        <TanStackDevtools
-          config={{
-            position: "bottom-right",
-          }}
-          plugins={[
-            {
-              name: "Tanstack Router",
-              render: <TanStackRouterDevtoolsPanel />,
-            },
-            TanStackQueryDevtools,
-            StoreDevtools,
-          ]}
-        />
         <Scripts />
       </body>
     </html>

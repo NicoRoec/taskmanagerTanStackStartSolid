@@ -1,61 +1,16 @@
-import { createFileRoute, redirect } from '@tanstack/react-router';
-import { UserPlus, Mail, Shield, X, CheckCircle2, PenSquare, Trash2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
-import { useState } from 'react';
-import { useForm } from '@tanstack/react-form';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useReactTable, getCoreRowModel, getSortedRowModel, flexRender } from '@tanstack/react-table';
-import { getSessionInfo } from '../../../server/auth-functions';
-import { createUser, deleteUser, getUsersForAdmin, updateUser } from '../../../server/user-functions';
-import { useAuth } from '../../__root';
-
-/**
- * Route-Schutz in TanStack Router - beforeLoad Guard
- * ===================================================
- * 
- * Die beforeLoad-Funktion wird VOR dem Rendern der Komponente aufgerufen.
- * Sie kann:
- * 1. Daten vorausladen (Pre-fetching)
- * 2. Authentifizierung/Autorisierung prüfen
- * 3. Die Navigation blockieren oder umleiten
- * 
- * Wenn die Funktion einen Fehler wirft oder navigiert,
- * wird die Komponente NICHT gerendert.
- * 
- * Warum beforeLoad und nicht direkt in der Komponente?
- * -------------------------------------------------------
- * 1. **Server-seitig erzwingbar**: Bei SSR kann beforeLoad auf dem Server
- *    ausgeführt werden, BEVOR HTML gesendet wird
- * 2. **Early Exit**: Navigation passiert vor Code-Splitting
- * 3. **Konsistenz**: Schützt die Route unabhängig vom Client
- * 4. **Performance**: Lädt geschützte Ressourcen nicht unnötig
- * 
- * Beispiel:
- * ```
- * beforeLoad: () => {
- *   const session = await getSessionInfo()
- *   if (!session?.authenticated || session.role !== 'admin') {
- *     throw redirect({ to: '/login' })
- *   }
- * }
- * ```
- * 
- * Datei-basiertes Routing (Admin-Bereich)
- * Pfad der Datei: src/routes/_layout/admin/nutzer.jsx
- * Daraus wird automatisch die URL: /admin/nutzer
- * 
- * Diese Route ist Teil des Admin-Bereichs und liegt im
- * admin-Unterordner, wodurch sie automatisch unter /admin/
- * gruppiert wird.
- */
+import { createFileRoute, redirect } from '@tanstack/solid-router'
+import { createMemo, createSignal, For, Show } from 'solid-js'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/solid-query'
+import { ArrowDown, ArrowUp, ArrowUpDown, Plus, Pencil, Trash2, X } from 'lucide-solid'
+import { createSolidTable, flexRender, getCoreRowModel, getFilteredRowModel, getSortedRowModel } from '@tanstack/solid-table'
+import { createVirtualizer } from '@tanstack/solid-virtual'
+import { getSessionInfo } from '../../../server/auth-functions'
+import { createUser, deleteUser, getUsersForAdmin, updateUser } from '../../../server/user-functions'
+import { useAuth } from '../../__root'
+import { useAppForm } from '../../../hooks/demo.form'
 
 export const Route = createFileRoute('/_layout/admin/nutzer')({
   component: AdminNutzerPage,
-  /**
-   * beforeLoad: Schutz-Gate vor dem Rendern
-   * 
-   * Diese Funktion wird aufgerufen, BEVOR die Komponente gerendert wird.
-   * Serverseitig: Session wird im Server Function geprüft.
-   */
   beforeLoad: async () => {
     const sessionId =
       typeof document !== 'undefined'
@@ -64,651 +19,377 @@ export const Route = createFileRoute('/_layout/admin/nutzer')({
             .map((c) => c.trim())
             .find((c) => c.startsWith('task_session='))
             ?.split('=')[1] || null
-        : null;
+        : null
 
-    const session = await getSessionInfo({ data: { sessionId } });
-
+    const session = await getSessionInfo({ data: { sessionId } })
     if (!session?.authenticated || session.role !== 'admin') {
-      throw redirect({ to: '/login' });
+      throw redirect({ to: '/login' })
     }
   },
-});
+})
 
 function AdminNutzerPage() {
-  const { session } = useAuth();
-  const queryClient = useQueryClient();
-  const [showAddUserModal, setShowAddUserModal] = useState(false);
-  const [showEditUserModal, setShowEditUserModal] = useState(false);
-  const [showInviteModal, setShowInviteModal] = useState(false);
-  const [feedbackMessage, setFeedbackMessage] = useState('');
-  const [editingUser, setEditingUser] = useState(null);
-  const [sorting, setSorting] = useState([]);
+  const auth = useAuth()
+  const queryClient = useQueryClient()
+  const [showCreateModal, setShowCreateModal] = createSignal(false)
+  const [sorting, setSorting] = createSignal([])
+  const [globalFilter, setGlobalFilter] = createSignal('')
+  const [roleFilter, setRoleFilter] = createSignal('all')
+  let scrollContainerRef
 
-  function formatRole(role) {
-    return role === 'admin' ? 'Admin' : 'User';
-  }
+  const ROW_HEIGHT = 52
 
-  function formatDate(value) {
-    if (!value) return '—';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return value;
-    return new Intl.DateTimeFormat('de-DE', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    }).format(date);
-  }
+  const usersQuery = useQuery(() => ({
+    queryKey: ['admin', 'users', auth.session?.sessionId ?? null],
+    enabled: Boolean(auth.session?.sessionId),
+    queryFn: () => getUsersForAdmin({ data: { sessionId: auth.session?.sessionId } }),
+    staleTime: 30 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  }))
 
-  const usersQuery = useQuery({
-    queryKey: ['admin', 'users', session?.sessionId ?? null],
-    enabled: Boolean(session?.sessionId),
-    queryFn: async () => {
-      const rows = await getUsersForAdmin({
-        data: {
-          sessionId: session?.sessionId,
-        },
-      });
-
-      return (rows || []).map((item) => ({
-        ...item,
-        roleLabel: formatRole(item.role),
-        lastActiveLabel: formatDate(item.updatedAt),
-      }));
-    },
-    staleTime: 60 * 1000,
-  });
-
-  const users = usersQuery.data || [];
-
-  const addUserMutation = useMutation({
-    mutationFn: async (payload) => createUser({ data: payload }),
-    onSuccess: (result, variables) => {
-      if (!result?.success) {
-        setFeedbackMessage(result?.error || 'Nutzer konnte nicht angelegt werden.');
-        return;
-      }
-      setShowAddUserModal(false);
-      setFeedbackMessage(`Nutzer ${variables.name} wurde erfolgreich hinzugefügt.`);
-      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
-    },
-  });
-
-  const updateUserMutation = useMutation({
-    mutationFn: async (payload) => updateUser({ data: payload }),
-    onSuccess: (result, variables) => {
-      if (!result?.success) {
-        setFeedbackMessage(result?.error || 'Nutzer konnte nicht aktualisiert werden.');
-        return;
-      }
-      setShowEditUserModal(false);
-      setEditingUser(null);
-      setFeedbackMessage(`Nutzer ${variables.name} wurde gespeichert.`);
-      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
-      queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] });
-    },
-  });
-
-  const deleteUserMutation = useMutation({
-    mutationFn: async (payload) => deleteUser({ data: payload }),
-    onSuccess: (result, variables) => {
-      if (!result?.success) {
-        setFeedbackMessage(result?.error || 'Nutzer konnte nicht gelöscht werden.');
-        return;
-      }
-      setFeedbackMessage(`Nutzer ${variables.name} wurde gelöscht.`);
-      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
-      queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] });
-    },
-  });
-
-  const sendInviteMutation = useMutation({
-    mutationFn: async (email) => {
-      await new Promise((resolve) => setTimeout(resolve, 400));
-      return email;
-    },
-    onSuccess: (email) => {
-      setShowInviteModal(false);
-      setFeedbackMessage(`Einladung wurde an ${email} versendet.`);
-    },
-  });
-
-  const addUserForm = useForm({
+  const createUserForm = useAppForm(() => ({
     defaultValues: {
       name: '',
       email: '',
       role: 'user',
     },
     onSubmit: async ({ value }) => {
-      await addUserMutation.mutateAsync({
-        sessionId: session?.sessionId,
+      if (!auth.session?.sessionId) return
+
+      await createUserMutation.mutateAsync({
+        sessionId: auth.session.sessionId,
         name: value.name,
         email: value.email,
         role: value.role,
-      });
-      addUserForm.reset();
-    },
-  });
+      })
 
-  const editUserForm = useForm({
-    defaultValues: {
-      name: '',
-      email: '',
-      role: 'user',
+      createUserForm.reset()
+      setShowCreateModal(false)
     },
-    onSubmit: async ({ value }) => {
-      if (!editingUser) return;
+  }))
 
-      await updateUserMutation.mutateAsync({
-        sessionId: session?.sessionId,
-        userId: editingUser.id,
-        name: value.name,
-        email: value.email,
-        role: value.role,
-      });
-    },
-  });
+  const createUserMutation = useMutation(() => ({
+    mutationFn: (payload) => createUser({ data: payload }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'users'] }),
+  }))
 
-  const inviteForm = useForm({
-    defaultValues: {
-      email: '',
-    },
-    onSubmit: async ({ value }) => {
-      await sendInviteMutation.mutateAsync(value.email);
-      inviteForm.reset();
-    },
-  });
+  const updateUserMutation = useMutation(() => ({
+    mutationFn: (payload) => updateUser({ data: payload }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'users'] }),
+  }))
 
-  function openEditUser(user) {
-    setEditingUser(user);
-    editUserForm.setFieldValue('name', user.name);
-    editUserForm.setFieldValue('email', user.email);
-    editUserForm.setFieldValue('role', user.role);
-    setShowEditUserModal(true);
-    setFeedbackMessage('');
+  const deleteUserMutation = useMutation(() => ({
+    mutationFn: (payload) => deleteUser({ data: payload }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'users'] }),
+  }))
+
+  function openCreateModal() {
+    createUserForm.reset()
+    setShowCreateModal(true)
+  }
+
+  async function handleEditUser(user) {
+    if (!auth.session?.sessionId) return
+    const nextName = window.prompt('Name', user.name)
+    if (!nextName) return
+    const nextEmail = window.prompt('E-Mail', user.email)
+    if (!nextEmail) return
+
+    await updateUserMutation.mutateAsync({
+      sessionId: auth.session.sessionId,
+      userId: user.id,
+      name: nextName,
+      email: nextEmail,
+      role: user.role,
+    })
   }
 
   async function handleDeleteUser(user) {
-    const shouldDelete = window.confirm(`Nutzer ${user.name} wirklich löschen?`);
-    if (!shouldDelete) return;
+    if (!auth.session?.sessionId) return
+    const ok = window.confirm(`Nutzer ${user.name} loeschen?`)
+    if (!ok) return
 
     await deleteUserMutation.mutateAsync({
-      sessionId: session?.sessionId,
+      sessionId: auth.session.sessionId,
       userId: user.id,
       name: user.name,
-    });
+    })
   }
 
-  const columns = [
+  const users = createMemo(() => usersQuery.data || [])
+
+  const roleFilteredUsers = createMemo(() => {
+    const list = users()
+    if (roleFilter() === 'all') return list
+    return list.filter((user) => user.role === roleFilter())
+  })
+
+  const columns = createMemo(() => [
     {
       accessorKey: 'name',
-      header: 'Nutzer',
-      cell: ({ row }) => (
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gray-200 dark:bg-gray-600 rounded-full flex items-center justify-center">
-            <span className="text-sm font-medium text-gray-600 dark:text-gray-200">
-              {row.original.name
-                .split(' ')
-                .map((part) => part[0])
-                .join('')
-                .slice(0, 2)
-                .toUpperCase()}
-            </span>
-          </div>
-          <div>
-            <p className="font-medium text-gray-900 dark:text-white">{row.original.name}</p>
-            <p className="text-sm text-gray-500 dark:text-gray-400">{row.original.email}</p>
-          </div>
-        </div>
-      ),
+      header: 'Name',
+      cell: (info) => info.getValue() || '-',
+    },
+    {
+      accessorKey: 'email',
+      header: 'E-Mail',
+      cell: (info) => info.getValue() || '-',
+    },
+    {
+      accessorKey: 'role',
+      header: 'Rolle',
+      cell: (info) => info.getValue() || '-',
     },
     {
       accessorKey: 'tasksCount',
       header: 'Aufgaben',
-      cell: ({ getValue }) => <span className="text-gray-700 dark:text-gray-300">{getValue()}</span>,
-    },
-    {
-      accessorKey: 'roleLabel',
-      header: 'Rolle',
-      cell: ({ row }) => (
-        <span
-          className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full ${
-            row.original.role === 'admin'
-              ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-200'
-              : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
-          }`}
-        >
-          {row.original.role === 'admin' && <Shield size={12} />}
-          {row.original.roleLabel}
-        </span>
-      ),
-    },
-    {
-      accessorKey: 'lastActiveLabel',
-      header: 'Zuletzt aktiv',
-      cell: ({ getValue }) => <span className="text-gray-600 dark:text-gray-400 text-sm">{getValue()}</span>,
+      cell: (info) => info.getValue() ?? 0,
     },
     {
       id: 'actions',
       header: 'Aktionen',
       enableSorting: false,
-      cell: ({ row }) => (
-        <div className="flex justify-end items-center gap-3">
-          <button
-            type="button"
-            onClick={() => openEditUser(row.original)}
-            className="text-blue-600 hover:text-blue-800"
-            aria-label="Nutzer bearbeiten"
-          >
-            <PenSquare size={16} />
-          </button>
-          <button
-            type="button"
-            onClick={() => handleDeleteUser(row.original)}
-            className="text-red-600 hover:text-red-800"
-            aria-label="Nutzer löschen"
-          >
-            <Trash2 size={16} />
-          </button>
+      enableGlobalFilter: false,
+      cell: (info) => (
+        <div className="flex items-center gap-3">
+          <button onClick={() => handleEditUser(info.row.original)} className="text-blue-600"><Pencil size={16} /></button>
+          <button onClick={() => handleDeleteUser(info.row.original)} className="text-red-600"><Trash2 size={16} /></button>
         </div>
       ),
     },
-  ];
+  ])
 
-  const table = useReactTable({
-    data: users,
-    columns,
-    state: { sorting },
+  const table = createSolidTable({
+    get data() {
+      return roleFilteredUsers()
+    },
+    get columns() {
+      return columns()
+    },
+    get state() {
+      return {
+        sorting: sorting(),
+        globalFilter: globalFilter(),
+      }
+    },
     onSortingChange: setSorting,
+    onGlobalFilterChange: setGlobalFilter,
     getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
     getSortedRowModel: getSortedRowModel(),
-  });
+  })
+
+  const rows = createMemo(() => {
+    sorting()
+    globalFilter()
+    roleFilter()
+    return table.getRowModel().rows.slice()
+  })
+
+  const rowVirtualizer = createVirtualizer({
+    get count() {
+      return rows().length
+    },
+    getScrollElement: () => scrollContainerRef,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 6,
+  })
+
+  function sortIcon(column) {
+    const isSorted = column.getIsSorted()
+    if (isSorted === 'asc') return <ArrowUp size={14} />
+    if (isSorted === 'desc') return <ArrowDown size={14} />
+    return <ArrowUpDown size={14} className="text-gray-400" />
+  }
 
   return (
-    <div>
-      <div className="mb-6">
+    <div className="h-full min-h-0 flex flex-col gap-6">
+      <div>
         <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Nutzer verwalten</h2>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-          Verwalte Benutzer und deren Berechtigungen
-        </p>
       </div>
 
-      {feedbackMessage && (
-        <div className="mb-4 p-3 rounded-md border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 flex items-center gap-2 text-sm text-green-800 dark:text-green-200">
-          <CheckCircle2 size={16} />
-          <span>{feedbackMessage}</span>
-        </div>
-      )}
-
-      {/* Action Buttons */}
-      <div className="mb-6 flex gap-3">
-        <button
-          onClick={() => {
-            addUserForm.reset();
-            setFeedbackMessage('');
-            setShowAddUserModal(true);
-          }}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
+      <div className="flex gap-3">
+        <input
+          value={globalFilter()}
+          onInput={(e) => setGlobalFilter(e.currentTarget.value)}
+          placeholder="Suche nach Name oder E-Mail..."
+          className="px-3 py-2 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 w-full max-w-md"
+        />
+        <select
+          value={roleFilter()}
+          onChange={(e) => setRoleFilter(e.currentTarget.value)}
+          className="px-3 py-2 rounded border"
         >
-          <UserPlus size={18} />
-          <span>Nutzer hinzufügen</span>
-        </button>
-        <button
-          onClick={() => {
-            setFeedbackMessage('');
-            setShowInviteModal(true);
-          }}
-          className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm"
-        >
-          <Mail size={18} />
-          <span>Einladung senden</span>
-        </button>
+          <option value="all">Alle Rollen</option>
+          <option value="user">user</option>
+          <option value="admin">admin</option>
+        </select>
       </div>
 
-      {/* Nutzer-Tabelle (TanStack Table mit Sortierung) */}
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
-            {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <th
-                    key={header.id}
-                    className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-600 dark:text-gray-300 ${
-                      header.column.getCanSort() ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : ''
-                    } ${header.id === 'actions' ? 'text-right' : ''}`}
-                    onClick={header.column.getCanSort() ? header.column.getToggleSortingHandler() : undefined}
-                  >
-                    <div className={`flex items-center gap-2 ${header.id === 'actions' ? 'justify-end' : ''}`}>
-                      {flexRender(header.column.columnDef.header, header.getContext())}
-                      {header.column.getCanSort() && (
-                        <span className="text-gray-400">
-                          {header.column.getIsSorted() === 'asc' ? (
-                            <ArrowUp size={14} />
-                          ) : header.column.getIsSorted() === 'desc' ? (
-                            <ArrowDown size={14} />
-                          ) : (
-                            <ArrowUpDown size={14} />
-                          )}
-                        </span>
-                      )}
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            ))}
-          </thead>
-          <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-            {usersQuery.isLoading ? (
-              <tr>
-                <td colSpan={5} className="px-6 py-6 text-sm text-gray-500 dark:text-gray-400">
-                  Nutzer werden geladen...
-                </td>
-              </tr>
-            ) : table.getRowModel().rows.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-6 py-6 text-sm text-gray-500 dark:text-gray-400">
-                  Keine Nutzer vorhanden.
-                </td>
-              </tr>
-            ) : (
-              table.getRowModel().rows.map((row) => (
-                <tr key={row.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                  {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="px-6 py-4 text-sm">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
-                  ))}
+      <div className="flex-1 min-h-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col">
+        <table className="w-full text-sm table-fixed">
+          <thead className="bg-gray-50 dark:bg-gray-700">
+            <For each={table.getHeaderGroups()}>
+              {(headerGroup) => (
+                <tr className="table w-full table-fixed">
+                  <For each={headerGroup.headers}>
+                    {(header) => (
+                      <th
+                        className={`text-left px-4 py-2 ${header.column.getCanSort() ? 'cursor-pointer select-none' : ''}`}
+                        onClick={header.column.getCanSort() ? header.column.getToggleSortingHandler() : undefined}
+                      >
+                        {header.isPlaceholder ? null : (
+                          <div className="inline-flex items-center gap-2">
+                            <span>{flexRender(header.column.columnDef.header, header.getContext())}</span>
+                            {header.column.getCanSort() && sortIcon(header.column)}
+                          </div>
+                        )}
+                      </th>
+                    )}
+                  </For>
                 </tr>
-              ))
-            )}
-          </tbody>
+              )}
+            </For>
+          </thead>
         </table>
+
+        <div
+          ref={scrollContainerRef}
+          className="flex-1 min-h-0 overflow-y-auto"
+        >
+          <div
+            className="relative"
+            style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+          >
+            <For each={rowVirtualizer.getVirtualItems()}>
+              {(virtualRow) => {
+                const row = () => rows()[virtualRow.index]
+                return (
+                  <div
+                    className="absolute left-0 top-0 w-full"
+                    style={{ transform: `translateY(${virtualRow.start}px)` }}
+                  >
+                    <table className="w-full text-sm table-fixed">
+                      <tbody>
+                        <tr className="border-t border-gray-100 dark:border-gray-700">
+                          <For each={row()?.getVisibleCells() || []}>
+                            {(cell) => (
+                              <td className="px-4 py-3 text-gray-800 dark:text-gray-100">
+                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                              </td>
+                            )}
+                          </For>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                )
+              }}
+            </For>
+          </div>
+        </div>
       </div>
 
-      {/* Modal: Nutzer hinzufügen */}
-      {showAddUserModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setShowAddUserModal(false)} />
-          <div className="relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl w-full max-w-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Neuen Nutzer hinzufügen</h3>
-              <button
-                onClick={() => setShowAddUserModal(false)}
-                className="p-1 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
-                aria-label="Schließen"
-              >
+      <button
+        type="button"
+        onClick={openCreateModal}
+        className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-600/30 flex items-center justify-center z-40"
+        aria-label="Neuen Nutzer anlegen"
+        title="Neuen Nutzer anlegen"
+      >
+        <Plus size={24} />
+      </button>
+
+      <Show when={showCreateModal()}>
+        <div className="fixed inset-0 z-50 bg-gray-900/50 flex items-center justify-center p-4" onClick={() => setShowCreateModal(false)}>
+          <div
+            className="w-full max-w-lg bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Neuen Nutzer anlegen</h3>
+              <button type="button" onClick={() => setShowCreateModal(false)} className="text-gray-500 hover:text-gray-800 dark:hover:text-gray-200">
                 <X size={18} />
               </button>
             </div>
 
             <form
-              className="space-y-4"
-              onSubmit={(event) => {
-                event.preventDefault();
-                addUserForm.handleSubmit();
+              className="p-5 space-y-4"
+              onSubmit={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                createUserForm.handleSubmit()
               }}
             >
-              <addUserForm.Field
-                name="name"
-                validators={{ onChange: ({ value }) => (!value ? 'Name ist erforderlich' : undefined) }}
-              >
+              <createUserForm.AppField name="name">
                 {(field) => (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name</label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Name</span>
                     <input
-                      type="text"
                       value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="z. B. Maria Muster"
+                      onBlur={field.handleBlur}
+                      onInput={(e) => field.handleChange(e.currentTarget.value)}
+                      placeholder="Max Mustermann"
+                      className="mt-1 w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                     />
-                    {field.state.meta.errors?.[0] && (
-                      <p className="text-xs text-red-600 dark:text-red-400 mt-1">{field.state.meta.errors[0]}</p>
-                    )}
-                  </div>
+                  </label>
                 )}
-              </addUserForm.Field>
+              </createUserForm.AppField>
 
-              <addUserForm.Field
-                name="email"
-                validators={{
-                  onChange: ({ value }) => {
-                    if (!value) return 'E-Mail ist erforderlich';
-                    if (!value.includes('@')) return 'Bitte gültige E-Mail eingeben';
-                    return undefined;
-                  },
-                }}
-              >
+              <createUserForm.AppField name="email">
                 {(field) => (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">E-Mail</label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-200">E-Mail</span>
                     <input
                       type="email"
                       value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      onBlur={field.handleBlur}
+                      onInput={(e) => field.handleChange(e.currentTarget.value)}
                       placeholder="name@firma.de"
+                      className="mt-1 w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                     />
-                    {field.state.meta.errors?.[0] && (
-                      <p className="text-xs text-red-600 dark:text-red-400 mt-1">{field.state.meta.errors[0]}</p>
-                    )}
-                  </div>
+                  </label>
                 )}
-              </addUserForm.Field>
+              </createUserForm.AppField>
 
-              <addUserForm.Field name="rolle">
+              <createUserForm.AppField name="role">
                 {(field) => (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Rolle</label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Rolle</span>
                     <select
                       value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(e.currentTarget.value)}
+                      className="mt-1 w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                     >
-                      <option value="user">User</option>
-                      <option value="admin">Admin</option>
+                      <option value="user">user</option>
+                      <option value="admin">admin</option>
                     </select>
-                  </div>
+                  </label>
                 )}
-              </addUserForm.Field>
+              </createUserForm.AppField>
 
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="pt-2 flex items-center justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setShowAddUserModal(false)}
-                  className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
+                  onClick={() => setShowCreateModal(false)}
+                  className="px-4 py-2 rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200"
                 >
                   Abbrechen
                 </button>
                 <button
                   type="submit"
-                  disabled={addUserMutation.isPending}
-                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-blue-400"
+                  className="px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50"
+                  disabled={createUserMutation.isPending}
                 >
-                  {addUserMutation.isPending ? 'Speichern...' : 'Hinzufügen'}
+                  Nutzer erstellen
                 </button>
               </div>
             </form>
           </div>
         </div>
-      )}
-
-      {/* Modal: Nutzer bearbeiten */}
-      {showEditUserModal && editingUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setShowEditUserModal(false)} />
-          <div className="relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl w-full max-w-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Nutzer bearbeiten</h3>
-              <button
-                onClick={() => setShowEditUserModal(false)}
-                className="p-1 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
-                aria-label="Schließen"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <form
-              className="space-y-4"
-              onSubmit={(event) => {
-                event.preventDefault();
-                editUserForm.handleSubmit();
-              }}
-            >
-              <editUserForm.Field
-                name="name"
-                validators={{ onChange: ({ value }) => (!value ? 'Name ist erforderlich' : undefined) }}
-              >
-                {(field) => (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name</label>
-                    <input
-                      type="text"
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    {field.state.meta.errors?.[0] && (
-                      <p className="text-xs text-red-600 dark:text-red-400 mt-1">{field.state.meta.errors[0]}</p>
-                    )}
-                  </div>
-                )}
-              </editUserForm.Field>
-
-              <editUserForm.Field
-                name="email"
-                validators={{
-                  onChange: ({ value }) => {
-                    if (!value) return 'E-Mail ist erforderlich';
-                    if (!value.includes('@')) return 'Bitte gültige E-Mail eingeben';
-                    return undefined;
-                  },
-                }}
-              >
-                {(field) => (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">E-Mail</label>
-                    <input
-                      type="email"
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    {field.state.meta.errors?.[0] && (
-                      <p className="text-xs text-red-600 dark:text-red-400 mt-1">{field.state.meta.errors[0]}</p>
-                    )}
-                  </div>
-                )}
-              </editUserForm.Field>
-
-              <editUserForm.Field name="role">
-                {(field) => (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Rolle</label>
-                    <select
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="user">User</option>
-                      <option value="admin">Admin</option>
-                    </select>
-                  </div>
-                )}
-              </editUserForm.Field>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowEditUserModal(false)}
-                  className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
-                >
-                  Abbrechen
-                </button>
-                <button
-                  type="submit"
-                  disabled={updateUserMutation.isPending}
-                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-blue-400"
-                >
-                  {updateUserMutation.isPending ? 'Speichern...' : 'Speichern'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal: Einladung senden */}
-      {showInviteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setShowInviteModal(false)} />
-          <div className="relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl w-full max-w-md p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Einladung senden</h3>
-              <button
-                onClick={() => setShowInviteModal(false)}
-                className="p-1 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
-                aria-label="Schließen"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <form
-              className="space-y-4"
-              onSubmit={(event) => {
-                event.preventDefault();
-                inviteForm.handleSubmit();
-              }}
-            >
-              <inviteForm.Field
-                name="email"
-                validators={{
-                  onChange: ({ value }) => {
-                    if (!value) return 'E-Mail ist erforderlich';
-                    if (!value.includes('@')) return 'Bitte gültige E-Mail eingeben';
-                    return undefined;
-                  },
-                }}
-              >
-                {(field) => (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">E-Mail Adresse</label>
-                    <input
-                      type="email"
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="einladung@firma.de"
-                    />
-                    {field.state.meta.errors?.[0] && (
-                      <p className="text-xs text-red-600 dark:text-red-400 mt-1">{field.state.meta.errors[0]}</p>
-                    )}
-                  </div>
-                )}
-              </inviteForm.Field>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowInviteModal(false)}
-                  className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
-                >
-                  Abbrechen
-                </button>
-                <button
-                  type="submit"
-                  disabled={sendInviteMutation.isPending}
-                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-blue-400"
-                >
-                  {sendInviteMutation.isPending ? 'Senden...' : 'Senden'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      </Show>
     </div>
-  );
+  )
 }

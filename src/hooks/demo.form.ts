@@ -1,4 +1,4 @@
-import { createFormHook } from '@tanstack/react-form'
+import { createFormHook } from '@tanstack/solid-form'
 
 import {
   Select,

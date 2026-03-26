@@ -1,5 +1,6 @@
-import { createFileRoute, redirect } from '@tanstack/react-router';
-import { FolderPlus, Settings, Archive } from 'lucide-react';
+import { createFileRoute } from '@tanstack/solid-router'
+// import { redirect } from '@tanstack/solid-router'; // Falls redirect benötigt wird, bitte von solid-router importieren
+import { FolderPlus, Settings, Archive } from 'lucide-solid';
 import { getSessionInfo } from '../../../server/auth-functions';
 
 /**

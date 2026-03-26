@@ -1,4 +1,4 @@
-import { createServerFn } from '@tanstack/react-start';
+import { createServerFn } from '@tanstack/solid-start';
 import { getDb, all, run, get } from './db';
 import { getSessionInfo } from './auth-functions';
 

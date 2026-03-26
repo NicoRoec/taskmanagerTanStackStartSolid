@@ -1,994 +1,456 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { Plus, ArrowUpDown, ArrowUp, ArrowDown, PenSquare, Trash2, X, Search } from 'lucide-react';
-import { useMemo, useState, useCallback, useRef } from 'react';
-import { useForm } from '@tanstack/react-form';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useVirtualizer } from '@tanstack/react-virtual';
-import { useAuth } from '../__root';
-import { useSearch } from '@tanstack/react-router';
-import { z } from 'zod';
-import { getTasksForList, createTask, updateTask, deleteTask } from '../../server/task-functions';
-import {
-  useReactTable,
-  getCoreRowModel,
-  getSortedRowModel,
-  flexRender,
-} from '@tanstack/react-table';
-
-/**
- * TanStack Table - Headless Tabellen-Logik für mehrere Routes
- * ===========================================================
- * 
- * DIESE DATEI: Aktive Tasks (nicht gelöschte)
- * VERGLEICH: src/routes/_layout/papierkorb.jsx (gelöschte Tasks)
- * 
- * Headless Pattern erklärt:
- * ========================
- * TanStack Table ist "headless" - das bedeutet:
- * - Die Bibliothek liefert NUR die LOGIK (Sortierung, Filter, etc.)
- * - Keine vordefinierten HTML/CSS Komponenten
- * - WIR definieren das Aussehen mit Tailwind
- * 
- * Vorteil: Beide Routes (aufgaben + papierkorb) können die gleiche
- * TanStack Table Logic nutzen, aber unterschiedliche UI/Aktionen haben!
- * 
- * Spalten-Wiederverwendung:
- * =========================
- * Beide Routes nutzen GLEICHE Spalten für:
- * - Nr. (ID)
- * - Titel
- * - Status (mit Farben)
- * - Priorität (mit Farben)
- * - Fällig am (Datum)
- * 
- * Unterschiedliche Spalten pro Route:
- * ===================================
- * 
- * /aufgaben:
- *   Aktionen: [Bearbeiten (Pen)] [Soft Delete (Trash)]
- *   - Nur Admins sehen diese Buttons
- *   - Bearbeiten öffnet Modal mit TanStack Form
- *   - Soft Delete setzt is_deleted=1 (reversibel!)
- * 
- * /papierkorb:
- *   Aktionen: [Wiederherstellen (Undo)] [Permanent Delete (Trash)]
- *   - Alle User können ihre eigenen Tasks wiederherstellen
- *   - Nur Admins können permanent löschen (hard delete)
- *   - Keine Bearbeitung möglich (Tasks sind gelöscht!)
- * 
- * Diese Unterschiede werden in der useReactTable() columns Definition
- * durch Conditionals (isAdmin) definiert.
- * 
- * Lizenzmodell:
- * =============
- * Statt zwei völlig verschiedene Tabellen-Komponenten zu schreiben,
- * nutzen wir ein Spalten-System. Die Zeilen-rendering ist identisch,
- * aber die Action-Spalte ändert sich je nach Route/Kontext.
- */
-
-/**
- * Datei-basiertes Routing in TanStack Router
- * -----------------------------------------
- * TanStack Router nutzt die Dateistruktur unter src/routes/, um automatisch
- * Routen zu erstellen. Jede .jsx/.tsx Datei wird zu einer Route.
- * 
- * Diese Datei liegt in: src/routes/_layout/aufgaben.jsx
- * => Daraus wird automatisch die URL: /aufgaben
- * 
- * Verschachtelte (Nested) Routen
- * ------------------------------
- * Unterordner und Dateien mit gleichem Präfix erzeugen Unterrouten:
- * - src/routes/_layout/aufgaben/neu.jsx => URL: /aufgaben/neu
- * 
- * Beide Routen teilen sich das Layout aus src/routes/_layout.jsx,
- * da sie beide im _layout Ordner liegen.
- * 
- * Vorteile:
- * - Automatisches Routing ohne manuelle Route-Konfiguration
- * - Klare Ordnerstruktur = URL-Struktur
- * - Type-Safety für Route-Parameter und Navigation
- */
+import { createFileRoute } from '@tanstack/solid-router'
+import { createEffect, createMemo, createSignal, For, onCleanup, Show } from 'solid-js'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/solid-query'
+import { ArrowDown, ArrowUp, ArrowUpDown, Plus, Pencil, Trash2, X } from 'lucide-solid'
+import { createSolidTable, flexRender, getCoreRowModel, getSortedRowModel } from '@tanstack/solid-table'
+import { createVirtualizer } from '@tanstack/solid-virtual'
+import { useAuth } from '../__root'
+import { getTasksForList, createTask, updateTask, deleteTask } from '../../server/task-functions'
+import { getUsersForAdmin } from '../../server/user-functions'
+import { useAppForm } from '../../hooks/demo.form'
 
 export const Route = createFileRoute('/_layout/aufgaben')({
   component: AufgabenPage,
-  /**
-   * TanStack Search - URL-State Management
-   * ======================================
-   * validateSearch definiert, welche URL-Parameter zu dieser Route gehören.
-   * Mit Zod wird der Typ validiert und normalisiert.
-   * 
-   * TanStack Router hält diese Parameter im URL sync:
-   * - /aufgaben?q=Mockup -> useSearch() gibt { q: 'Mockup' } zurück
-   * - Wenn Nutzer URL direkt öffnet: Suchfeld wird mit Wert gefüllt
-   * - Bei Bookmarks/Share: Der Suchzustand ist automatisch gespeichert!
-   * 
-   * Zod Schema: Definiert den Typ der Suchparams
-   * - q: optionaler string (Suchtext), default: leerer String
-   * - Wird vom React Router zur Validierung/Normalisierung genutzt
-   */
-  validateSearch: z.object({
-    q: z.string().optional().default(''),
-  }).parse,
-  /**
-   * TanStack Router Loader
-   * ======================
-   * 
-   * Loader laufen vor dem Rendern der Route. Hier laden wir die Tasks
-   * aus der DB, damit die Seite direkt mit Daten gerendert wird.
-   */
-  loader: async () => {
-    // SSR-sicher: Die Tasks werden erst nach dem Hydrieren im Client geladen,
-    // damit Server- und Client-HTML uebereinstimmen.
-    return { tasks: [] };
-  },
-});
+})
 
 function AufgabenPage() {
-  const { isAdmin, session } = useAuth();
-  const loaderData = Route.useLoaderData() || { tasks: [] };
-  const navigate = Route.useNavigate();
-  const search = useSearch({ from: '/_layout/aufgaben' });
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingTaskId, setEditingTaskId] = useState(null);
-  const [selectedTab, setSelectedTab] = useState('all');
-  const searchInputRef = useRef();
+  const auth = useAuth()
+  const queryClient = useQueryClient()
+  const [searchInput, setSearchInput] = createSignal('')
+  const [debouncedSearch, setDebouncedSearch] = createSignal('')
+  const [filterType, setFilterType] = createSignal('all')
+  const [showCreateModal, setShowCreateModal] = createSignal(false)
+  const [sorting, setSorting] = createSignal([])
+  let scrollContainerRef
 
-  /**
-   * Debounce für Suchfeld
-   * ====================
-   * Wir wollen nicht bei JEDEM Keystroke einen neuen Query starten.
-   * debounceTimer verzögert den URL-Update um 300ms.
-   * Dadurch: Nutzer tippt "Mockup", und erst 300ms nach dem letzten Keystroke
-   * wird die Query neu gemacht.
-   */
-  const debounceTimer = useRef();
+  const ROW_HEIGHT = 52
 
-  const handleSearchChange = useCallback(
-    (value) => {
-      if (debounceTimer.current) {
-        clearTimeout(debounceTimer.current);
-      }
-      debounceTimer.current = setTimeout(() => {
-        navigate({ search: (prev) => ({ ...prev, q: value }) });
-      }, 300);
-    },
-    [navigate]
-  );
+  createEffect(() => {
+    const value = searchInput()
+    const timer = setTimeout(() => {
+      setDebouncedSearch(value)
+    }, 300)
+    onCleanup(() => clearTimeout(timer))
+  })
 
-  // Mock-Liste der Benutzer für "Zugewiesen an"
-  const userOptions = [
-    'Admin',
-    'user',
-    'Erika Musterfrau',
-    'Max Mustermann',
-    'Jon Doe',
-    'Chris Coder',
-  ];
+  const usersQuery = useQuery(() => ({
+    queryKey: ['admin', 'users', auth.session?.sessionId ?? null],
+    enabled: Boolean(auth.session?.sessionId) && auth.isAdmin,
+    queryFn: () => getUsersForAdmin({ data: { sessionId: auth.session?.sessionId } }),
+    staleTime: 120 * 1000,
+  }))
 
-  function formatDateToInput(value) {
-    if (!value) return '';
-    if (value.includes('.')) {
-      const [day, month, year] = value.split('.');
-      if (year && month && day) {
-        return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-      }
-    }
-    return value;
-  }
-
-  function formatDateForDisplay(value) {
-    if (!value) return '';
-    if (value.includes('-')) {
-      const [year, month, day] = value.split('-');
-      if (year && month && day) {
-        return `${day}.${month}.${year}`;
-      }
-    }
-    return value;
-  }
-
-  function normalizeAssignee(value) {
-    if (value === null || value === undefined || value === '') {
-      return userOptions[0];
-    }
-    const numericValue = Number(value);
-    if (!Number.isNaN(numericValue)) {
-      if (numericValue === 1) return 'Admin';
-      if (numericValue === 2) return 'user';
-      return `User ${numericValue}`;
-    }
-    return value;
-  }
-
-  const queryClient = useQueryClient();
-  const tasksQueryKey = ['tasks', 'list', session?.sessionId ?? null, selectedTab, search.q];
-
-  /**
-   * TanStack Query + TanStack Search Integration
-   * ============================================
-   * Die QueryKey enthält AUCH den search.q Parameter.
-   * Das bedeutet: Wenn URL sich ändert (z.B. ?q=Mockup), wird
-   * automatisch eine neue Query mit den neuen Daten gemacht.
-   * 
-   * TanStack Router + Query Sync:
-   * - URL ändert → search.q ändert
-   * - search.q ändert → queryKey ändert
-   * - queryKey ändert → TanStack Query refetcht automatisch
-   * ✅ Perfekt für bookmarkbare/shareable Suchfilter!
-   */
-  const tasksQuery = useQuery({
-    queryKey: tasksQueryKey,
-    enabled: Boolean(session?.sessionId),
-    placeholderData: loaderData.tasks || [],
-    queryFn: async () => {
-      const nextTasks = await getTasksForList({
+  const tasksQuery = useQuery(() => ({
+    queryKey: ['tasks', 'list', auth.session?.sessionId ?? null, filterType(), debouncedSearch()],
+    enabled: Boolean(auth.session?.sessionId),
+    queryFn: () =>
+      getTasksForList({
         data: {
-          sessionId: session.sessionId,
-          filterType: selectedTab,
-          searchQuery: search.q,  // Suchtext aus URL zum Server senden
+          sessionId: auth.session?.sessionId,
+          filterType: filterType(),
+          searchQuery: debouncedSearch(),
         },
-      });
+      }),
+    placeholderData: (previousData) => previousData,
+    staleTime: 20 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  }))
 
-      return (nextTasks || []).map((task) => ({
-        ...task,
-        assignee: normalizeAssignee(task.assignee),
-      }));
+  const createTaskMutation = useMutation(() => ({
+    mutationFn: (payload) => createTask({ data: payload }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] }),
+  }))
+
+  const updateTaskMutation = useMutation(() => ({
+    mutationFn: (payload) => updateTask({ data: payload }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] }),
+  }))
+
+  const deleteTaskMutation = useMutation(() => ({
+    mutationFn: (payload) => deleteTask({ data: payload }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] })
+      queryClient.invalidateQueries({ queryKey: ['tasks', 'trash'] })
     },
-    staleTime: 60 * 1000,
-    gcTime: 5 * 60 * 1000,
-  });
+  }))
 
-  const tasks = tasksQuery.data || [];
-
-  /**
-   * Mutations fuer Create/Update/Delete
-   * ===================================
-   * TanStack Query kapselt die Schreiboperationen und aktualisiert
-   * den Cache gezielt, damit die UI sofort konsistent bleibt.
-   */
-  const createTaskMutation = useMutation({
-    mutationFn: async (payload) => createTask({ data: payload }),
-    onSuccess: (result, variables) => {
-      if (!result?.success) return;
-
-      queryClient.setQueryData(tasksQueryKey, (prev = []) => [
-        ...prev,
-        {
-          id: result.taskId,
-          title: variables.title,
-          status: variables.status,
-          priority: variables.priority,
-          dueDate: formatDateForDisplay(variables.dueDate),
-          assignee: normalizeAssignee(variables.assignedTo),
-          owner_id: session?.userId,
-        },
-      ]);
-
-      // Andere Filter-Views aktualisieren (z.B. "my" vs "all").
-      queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] });
-    },
-  });
-
-  const updateTaskMutation = useMutation({
-    mutationFn: async (payload) => updateTask({ data: payload }),
-    onSuccess: (result, variables) => {
-      if (!result?.success) return;
-
-      queryClient.setQueryData(tasksQueryKey, (prev = []) =>
-        prev.map((task) =>
-          task.id === variables.taskId
-            ? {
-                ...task,
-                title: variables.title,
-                status: variables.status,
-                priority: variables.priority,
-                dueDate: formatDateForDisplay(variables.dueDate),
-                assignee: normalizeAssignee(variables.assignedTo),
-              }
-            : task
-        )
-      );
-
-      queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] });
-    },
-  });
-
-  const deleteTaskMutation = useMutation({
-    mutationFn: async (payload) => deleteTask({ data: payload }),
-    onSuccess: (result, variables) => {
-      if (!result?.success) return;
-
-      queryClient.setQueryData(tasksQueryKey, (prev = []) =>
-        prev.filter((task) => task.id !== variables.taskId)
-      );
-
-      // Soft Delete fuehrt Task in den Papierkorb - Trash-Query muss updaten.
-      queryClient.invalidateQueries({ queryKey: ['tasks', 'trash'] });
-      queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] });
-    },
-  });
-
-  /**
-   * TanStack Form – wie funktioniert es hier?
-   * =========================================
-   * 
-   * Was ist TanStack Form?
-   * - Eine headless Formular-Bibliothek: Sie liefert Logik (State/Validierung/Submit)
-   *   und wir gestalten das UI mit Tailwind.
-   * 
-   * Warum nutzen wir TanStack Form (Vorteile)?
-   * - Zentrale Logik statt viele einzelne useState-Handler
-   * - Validierung pro Feld + saubere Fehlerausgabe
-   * - Einheitlicher Submit-Flow (async/await)
-   * - Skalierbar für große Formulare
-   * 
-   * Nachteile (ehrlich):
-   * - Etwas mehr Boilerplate als native Formulare
-   * - Zusätzliche Abstraktion, die man verstehen muss
-   * 
-   * Wie arbeitet es?
-   * 1) useForm() verwaltet Formular-State und liefert form.Field.
-   * 2) Jedes Feld registriert sich über <form.Field> (Name + Validatoren).
-   * 3) form.handleSubmit() validiert und ruft onSubmit auf.
-   */
-  /**
-   * TanStack Form mit Server Functions
-   * ==================================
-   * 
-   * Wichtig: Das Formular sendet nun Daten an Server Functions,
-   * nicht nur an lokale useState-Updates!
-   * 
-   * onSubmit wird async und ruft:
-   * - createTask() fuer neue Tasks
-   * - updateTask() fuer Updates
-   * 
-   * Diese Server Functions enforcing Ownership & Autorisierung auf dem Server!
-   */
-  const form = useForm({
+  const createTaskForm = useAppForm(() => ({
     defaultValues: {
       title: '',
       status: 'Neu',
-      priority: 'Mittel',
+      priority: 'mittel',
       dueDate: '',
-      assignee: userOptions[0],
+      assignedTo: auth.session?.username || 'Admin',
     },
     onSubmit: async ({ value }) => {
-      if (!isAdmin || !session?.sessionId) return;
-
-      try {
-        if (editingTaskId) {
-          // ===== UPDATE TASK =====
-          // Server Function ueberprueft: nur Admin oder Owner darf updaten
-          const result = await updateTaskMutation.mutateAsync({
-            sessionId: session.sessionId,
-            taskId: editingTaskId,
-            title: value.title,
-            status: value.status,
-            priority: value.priority,
-            dueDate: value.dueDate, // ISO-Format (YYYY-MM-DD) vom input type=date
-            assignedTo: value.assignee, // Zugewiesen an
-          });
-
-          if (!result.success) {
-            alert(`Fehler: ${result.error}`);
-            return;
-          }
-        } else {
-          // ===== CREATE TASK =====
-          // Server Function liest owner_id automatisch aus Session
-          // Client kann owner_id nicht manipulieren!
-          const result = await createTaskMutation.mutateAsync({
-            sessionId: session.sessionId,
-            title: value.title,
-            status: value.status,
-            priority: value.priority,
-            dueDate: value.dueDate, // ISO-Format (YYYY-MM-DD) vom input type=date
-            assignedTo: value.assignee, // Zugewiesen an
-          });
-
-          if (!result.success) {
-            alert(`Fehler: ${result.error}`);
-            return;
-          }
-        }
-
-        setIsFormOpen(false);
-        setEditingTaskId(null);
-        form.reset();
-      } catch (error) {
-        console.error('Fehler beim Submit:', error);
-        alert('Fehler beim Speichern. Bitte versuche es erneut.');
-      }
+      if (!auth.session?.sessionId) return
+      await createTaskMutation.mutateAsync({
+        sessionId: auth.session.sessionId,
+        title: value.title,
+        status: value.status,
+        priority: value.priority,
+        dueDate: value.dueDate,
+        assignedTo: value.assignedTo,
+      })
+      setShowCreateModal(false)
+      createTaskForm.reset()
     },
-  });
+  }))
 
-  // Helpers für Admin-Aktionen
-  function openCreateForm() {
-    if (!isAdmin) return;
-    setEditingTaskId(null);
-    form.reset();
-    setIsFormOpen(true);
-  }
+  const tasks = createMemo(() => tasksQuery.data || [])
 
-  function openEditForm(task) {
-    // Nur Admin darf editieren
-    if (!isAdmin) {
-      alert('Nur Administratoren dürfen Aufgaben bearbeiten.');
-      return;
-    }
-    setEditingTaskId(task.id);
-    form.setFieldValue('title', task.title);
-    form.setFieldValue('status', task.status);
-    form.setFieldValue('priority', task.priority);
-    form.setFieldValue('dueDate', formatDateToInput(task.dueDate));
-    form.setFieldValue('assignee', normalizeAssignee(task.assignee));
-    setIsFormOpen(true);
-  }
-
-  async function handleDeleteTask(taskId, task) {
-    if (!session?.sessionId) return;
-
-    // Zuweisungs-Check: Admin oder zugewiesener User darf loeschen
-    const isAssignee =
-      String(task?.assignee || '').toLowerCase() ===
-      String(session?.username || '').toLowerCase();
-
-    if (!isAdmin && !isAssignee) {
-      alert('Du darfst nur deine eigenen Aufgaben löschen.');
-      return;
-    }
-
-    try {
-      // Soft Delete: Task wird in Papierkorb verschoben (is_deleted = 1)
-      // Keine Bestaetigung noetig - Restore ist noch moglich!
-      const result = await deleteTaskMutation.mutateAsync({
-        sessionId: session.sessionId,
-        taskId,
-      });
-
-      if (!result.success) {
-        alert(`Fehler: ${result.error}`);
-        return;
+  const assigneeOptions = createMemo(() => {
+    const names = new Set()
+    names.add(auth.session?.username || 'Admin')
+    if (auth.isAdmin) {
+      for (const user of usersQuery.data || []) {
+        names.add(user.name)
       }
-
-    } catch (error) {
-      console.error('Fehler beim Loeschen:', error);
-      alert('Fehler beim Loeschen. Bitte versuche es erneut.');
+      names.add('Admin')
     }
-  }
+    return [...names]
+  })
 
-  // Spalten-Definition für TanStack Table
-  const columns = useMemo(
-    () => [
-      /**
-       * Spalten-Architektur erklärt (Aktive Tasks Version)
-       * ==================================================
-       * 
-       * Diese Spalten "fokussieren" auf aktive Tasks:
-       * - Benutzer müssen Titel, Status, Priorität + Datum kennen
-       * - Besitzer ist NICHT wichtig (User sehen nur ihre eigenen + Admin sieht alle)
-       * - Gelösch-Datum ist nicht relevant (es gibt keine!)
-       * 
-       * Vergleich mit papierkorb.jsx:
-       * ============================
-       * 
-       * Beide Routes: Titel, Status
-       * 
-       * Aufgaben (aktiv):    Priorität, Fällig am,     Zugewiesen an
-       * Papierkorb (trash):  Besitzer,  Gelöscht am,   (nicht relevant)
-       * 
-       * Aktionen:
-       * Aufgaben:   [✏️ Bearbeiten] [🗑️ Soft Delete]
-       * Papierkorb: [↩️ Restore]    [🗑️ Hard Delete]
-       * 
-       * Warum diese Unterscheidung?
-       * ===========================
-       * 1. Aktive Tasks: User wollen sie bearbeiten/löschen
-       * 2. Gelöschte Tasks: User wollen sie wiederherstellen
-       * 3. Ampel-Prinzip: Bearbeiten = Grün (produktiv)
-       *                    Löschen = Rot (nur wenn nötig)
-       *                    Restore = Blau (Notfall-Recovery)
-       * 
-       * Die TABLE-RENDERING-LOGIK ist identisch!
-       * Nur die columns-Config (JS Objects) unterscheiden sich.
-       */
-      {
-        accessorKey: 'id',
-        header: 'Nr.',
-        size: 60,
-      },
-      {
-        accessorKey: 'title',
-        header: 'Titel',
-        cell: (info) => (
-          <span className="font-medium text-gray-900 dark:text-gray-100">{info.getValue()}</span>
-        ),
-      },
-      {
-        accessorKey: 'status',
-        header: 'Status',
-        cell: (info) => {
-          const status = info.getValue();
-          const colorMap = {
-            'in Arbeit': 'bg-yellow-100 text-yellow-800',
-            'Neu': 'bg-gray-100 text-gray-800',
-            'Erledigt': 'bg-green-100 text-green-800',
-          };
-          return (
-            <span className={`inline-flex px-3 py-1 text-xs font-medium rounded-full ${colorMap[status]}`}>
-              {status}
-            </span>
-          );
-        },
-      },
-      {
-        accessorKey: 'priority',
-        header: 'Priorität',
-        cell: (info) => {
-          const priority = info.getValue();
-          const colorMap = {
-            'Hoch': 'text-red-600',
-            'Mittel': 'text-orange-600',
-            'Niedrig': 'text-blue-600',
-          };
-          return (
-            <span className={`font-medium ${colorMap[priority]}`}>
-              {priority}
-            </span>
-          );
-        },
-      },
-      {
-        accessorKey: 'dueDate',
-        header: 'Fällig am',
-      },
-      {
-        accessorKey: 'assignee',
-        header: 'Zugewiesen an',
-      },
-      {
-        id: 'actions',
-        header: 'Aktionen',
-        cell: ({ row }) => {
-          /**
-           * Row-Level Permissions für Actions
-           * ==================================
-           * 
-           * Edit [✏️]: NUR Admin (normalUser sieht Button nicht)
-           * Delete [🗑️]: Admin oder Task-Owner
-           * 
-           * Diese UI-Checks sind REDUNDANT mit Server-Side Checks,
-           * aber bessere UX (keine disabled-Buttons, einfach verstecken).
-           * 
-           * Server-Side Enforcement in updateTask/deleteTask:
-           * - updateTask: WHERE is_deleted = 0 + owner_id Check
-           * - deleteTask: owner_id Check (admin bypass)
-           */
-          // Zuweisungs-Check: Aktueller User ist zuständig?
-          const isAssignee =
-            String(row.original?.assignee || '').toLowerCase() ===
-            String(session?.username || '').toLowerCase();
+  const columns = createMemo(() => [
+    {
+      id: 'index',
+      header: '#',
+      cell: (info) => info.row.index + 1,
+      enableSorting: false,
+    },
+    {
+      accessorKey: 'title',
+      header: 'Titel',
+      cell: (info) => info.getValue() || '-',
+    },
+    {
+      accessorKey: 'status',
+      header: 'Status',
+      cell: (info) => info.getValue() || '-',
+    },
+    {
+      accessorKey: 'priority',
+      header: 'Prioritaet',
+      cell: (info) => info.getValue() || '-',
+    },
+    {
+      accessorKey: 'dueDate',
+      header: 'Faellig',
+      cell: (info) => info.getValue() || '-',
+    },
+    {
+      accessorKey: 'assignee',
+      header: 'Zugehoerigkeit',
+      cell: (info) => info.getValue() || '-',
+    },
+    {
+      id: 'actions',
+      header: 'Aktionen',
+      enableSorting: false,
+      cell: (info) => (
+        <div className="flex items-center gap-3">
+          <button onClick={() => handleEditTask(info.row.original)} className="text-blue-600 dark:text-blue-400"><Pencil size={16} /></button>
+          <button onClick={() => handleDeleteTask(info.row.original.id)} className="text-red-600 dark:text-red-400"><Trash2 size={16} /></button>
+        </div>
+      ),
+    },
+  ])
 
-          // Edit: Nur Admin
-          const canEdit = isAdmin;
-          // Delete: Admin oder zugewiesener User
-          const canDelete = isAdmin || isAssignee;
-
-          return (
-            <div className="flex items-center gap-3">
-              {canEdit && (
-                <button
-                  type="button"
-                  onClick={() => openEditForm(row.original)}
-                  className="text-blue-600 hover:text-blue-800"
-                  aria-label="Aufgabe bearbeiten"
-                >
-                  <PenSquare size={16} />
-                </button>
-              )}
-              {canDelete && (
-                <button
-                  type="button"
-                  onClick={() => handleDeleteTask(row.original.id, row.original)}
-                  className="text-red-600 hover:text-red-800"
-                  aria-label="Aufgabe in Papierkorb verschieben"
-                >
-                  <Trash2 size={16} />
-                </button>
-              )}
-            </div>
-          );
-        },
-        size: 120,
-      },
-    ],
-    [isAdmin, session]
-  );
-
-  // Sortier-State
-  const [sorting, setSorting] = useState([]);
-
-  // TanStack Table Instance erstellen
-  const table = useReactTable({
-    data: tasks,
-    columns,
-    state: {
-      sorting,
+  const table = createSolidTable({
+    get data() {
+      return tasks()
+    },
+    get columns() {
+      return columns()
+    },
+    get state() {
+      return {
+        sorting: sorting(),
+      }
     },
     onSortingChange: setSorting,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-  });
+  })
 
-  /**
-   * TanStack Virtual für lange Listen
-   * =================================
-   *
-   * Problem ohne Virtualisierung:
-   * - Bei 1000+ Zeilen rendert React ALLE Rows gleichzeitig.
-   * - Das kostet Zeit/Memory und macht Scrollen träge.
-   *
-   * Lösung mit useVirtualizer:
-   * - Es werden nur sichtbare Rows (+ Overscan) gerendert.
-   * - Nicht sichtbare Rows bleiben "virtuell" und belegen nur Höhe.
-   * - Ergebnis: flüssiges Scrollen auch bei sehr großen Tabellen.
-   */
-  const [tableContainerElement, setTableContainerElement] = useState(null);
-  const rows = table.getRowModel().rows;
+  const rows = createMemo(() => {
+    sorting()
+    return table.getRowModel().rows.slice()
+  })
 
-  const rowVirtualizer = useVirtualizer({
-    count: rows.length,
-    getScrollElement: () => tableContainerElement,
-    estimateSize: () => 52,
-    overscan: 12,
-  });
+  const rowVirtualizer = createVirtualizer({
+    get count() {
+      return rows().length
+    },
+    getScrollElement: () => scrollContainerRef,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 6,
+  })
 
-  const virtualRows = rowVirtualizer.getVirtualItems();
+  function sortIcon(column) {
+    const isSorted = column.getIsSorted()
+    if (isSorted === 'asc') return <ArrowUp size={14} />
+    if (isSorted === 'desc') return <ArrowDown size={14} />
+    return <ArrowUpDown size={14} className="text-gray-400" />
+  }
+
+  function openCreateModal() {
+    setShowCreateModal(true)
+    createTaskForm.reset()
+    createTaskForm.setFieldValue('assignedTo', auth.session?.username || 'Admin')
+  }
+
+  async function handleEditTask(task) {
+    if (!auth.session?.sessionId) return
+    const nextTitle = window.prompt('Titel bearbeiten', task.title)
+    if (!nextTitle) return
+    await updateTaskMutation.mutateAsync({
+      sessionId: auth.session.sessionId,
+      taskId: task.id,
+      title: nextTitle,
+      status: task.status || 'Neu',
+      priority: task.priority || 'mittel',
+      dueDate: task.dueDate,
+      assignedTo: task.assignee || auth.session.username,
+    })
+  }
+
+  async function handleDeleteTask(taskId) {
+    if (!auth.session?.sessionId) return
+    await deleteTaskMutation.mutateAsync({
+      sessionId: auth.session.sessionId,
+      taskId,
+    })
+  }
 
   return (
-    <div className="h-full">
-      {/* Header Bereich */}
-      <div className="mb-6">
-        <div className="flex items-center gap-4 mb-4">
-          <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200">Aufgabenliste</h2>
-        </div>
-        
-        {/* Suchfeld - TanStack Search Integration */}
-        <div className="mb-4 relative">
-          {/*
-            TanStack Search Suchfeld
-            ========================
-            Das Input-Feld speichert seinen Wert in der URL (?q=...).
-            Bei jedem Keystroke wird nach 300ms die Query neu gestartet.
-            
-            Vorteile dieser Implementierung:
-            1. Suchzustand ist bookmarkbar/shareable (URL enthält q-Param)
-            2. Browser Back/Forward funktioniert (Router verwaltet History)
-            3. Mehrere Tabs/Fenster sind automatisch synced (gleiche URL = gleiche Suche)
-            4. Suchverlauf ist im Browser-History sichtbar
-            
-            Ohne TanStack Search würde die Suche nur lokal sein (nicht in URL).
-          */}
-          <div className="relative">
-            <Search size={18} className="absolute left-3 top-2.5 text-gray-400 dark:text-gray-500" />
-            <input
-              ref={searchInputRef}
-              type="text"
-              placeholder="Nach Aufgaben suchen..."
-              defaultValue={search.q}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-        </div>
-        
-        {/* Filter Tabs - Visibility Control */}
-        <div className="flex gap-6 text-sm">
-          <button
-            onClick={() => setSelectedTab('all')}
-            className={`pb-1 ${
-              selectedTab === 'all'
-                ? 'text-gray-900 dark:text-white font-medium border-b-2 border-gray-900 dark:border-white'
-                : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-            }`}
-          >
-            Alle Aufgaben
-          </button>
-          <button
-            onClick={() => setSelectedTab('my')}
-            className={`pb-1 ${
-              selectedTab === 'my'
-                ? 'text-gray-900 dark:text-white font-medium border-b-2 border-gray-900 dark:border-white'
-                : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-            }`}
-          >
-            Meine Aufgaben
-          </button>
-        </div>
+    <div className="h-full min-h-0 flex flex-col gap-6">
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Aufgaben</h2>
+        <p className="text-sm text-gray-600 dark:text-gray-400">Aufgaben erstellen, bearbeiten und in den Papierkorb verschieben.</p>
       </div>
 
-      {/* TanStack Table + TanStack Virtual */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
-            {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <th
-                    key={header.id}
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
-                    onClick={header.column.getToggleSortingHandler()}
-                    style={{ width: header.getSize() }}
-                  >
-                    <div className="flex items-center gap-2">
-                      {flexRender(
-                        header.column.columnDef.header,
-                        header.getContext()
-                      )}
-                      {/* Sortier-Indikator */}
-                      {header.column.getCanSort() && (
-                        <span className="text-gray-400">
-                          {header.column.getIsSorted() === 'asc' ? (
-                            <ArrowUp size={14} />
-                          ) : header.column.getIsSorted() === 'desc' ? (
-                            <ArrowDown size={14} />
-                          ) : (
-                            <ArrowUpDown size={14} />
-                          )}
-                        </span>
-                      )}
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            ))}
+      <div className="flex gap-3">
+        <input
+          value={searchInput()}
+          onInput={(e) => setSearchInput(e.currentTarget.value)}
+          placeholder="Suche nach Titel oder Zugehoerigkeit..."
+          className="px-3 py-2 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 w-full max-w-md"
+        />
+        <select
+          value={filterType()}
+          onChange={(e) => setFilterType(e.currentTarget.value)}
+          className="px-3 py-2 rounded border"
+        >
+          <option value="all">Alle</option>
+          <option value="my">Meine</option>
+        </select>
+      </div>
+
+      <div className="flex-1 min-h-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col">
+        <table className="w-full text-sm table-fixed">
+          <thead className="bg-gray-50 dark:bg-gray-700">
+            <For each={table.getHeaderGroups()}>
+              {(headerGroup) => (
+                <tr className="table w-full table-fixed">
+                  <For each={headerGroup.headers}>
+                    {(header) => (
+                      <th
+                        className={`text-left px-4 py-2 font-semibold ${header.column.getCanSort() ? 'cursor-pointer select-none' : ''}`}
+                        onClick={header.column.getCanSort() ? header.column.getToggleSortingHandler() : undefined}
+                      >
+                        {header.isPlaceholder ? null : (
+                          <div className="inline-flex items-center gap-2">
+                            <span>{flexRender(header.column.columnDef.header, header.getContext())}</span>
+                            {header.column.getCanSort() && sortIcon(header.column)}
+                          </div>
+                        )}
+                      </th>
+                    )}
+                  </For>
+                </tr>
+              )}
+            </For>
           </thead>
         </table>
 
         <div
-          ref={setTableContainerElement}
-          className="max-h-[60vh] overflow-auto"
+          ref={scrollContainerRef}
+          className="flex-1 min-h-0 overflow-y-auto"
         >
-          <table className="w-full">
-            <tbody>
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={table.getAllColumns().length} className="px-6 py-6 text-sm text-gray-500 dark:text-gray-400">
-                    Keine Aufgaben gefunden.
-                  </td>
-                </tr>
-              ) : (
-                <>
-                  {virtualRows.length > 0 && virtualRows[0].start > 0 && (
-                    <tr>
-                      <td
-                        colSpan={table.getAllColumns().length}
-                        style={{ height: `${virtualRows[0].start}px` }}
-                      />
-                    </tr>
-                  )}
-
-                  {(virtualRows.length > 0 ? virtualRows : rows.slice(0, 30).map((_, index) => ({ index }))).map((virtualRowLike) => {
-                    const row = rows[virtualRowLike.index];
-                    if (!row) return null;
-
-                    return (
-                      <tr
-                        key={row.id}
-                        data-index={virtualRowLike.index}
-                        ref={virtualRows.length > 0 ? rowVirtualizer.measureElement : undefined}
-                        className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer border-b border-gray-200 dark:border-gray-700"
-                      >
-                        {row.getVisibleCells().map((cell) => (
-                          <td key={cell.id} className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                          </td>
-                        ))}
-                      </tr>
-                    );
-                  })}
-
-                  {virtualRows.length > 0 &&
-                    rowVirtualizer.getTotalSize() - virtualRows[virtualRows.length - 1].end > 0 && (
-                      <tr>
-                        <td
-                          colSpan={table.getAllColumns().length}
-                          style={{
-                            height: `${
-                              rowVirtualizer.getTotalSize() -
-                              virtualRows[virtualRows.length - 1].end
-                            }px`,
-                          }}
-                        />
-                      </tr>
-                    )}
-                </>
-              )}
-            </tbody>
-          </table>
+          <div
+            className="relative"
+            style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+          >
+            <For each={rowVirtualizer.getVirtualItems()}>
+              {(virtualRow) => {
+                const row = () => rows()[virtualRow.index]
+                return (
+                  <div
+                    className="absolute left-0 top-0 w-full"
+                    style={{ transform: `translateY(${virtualRow.start}px)` }}
+                  >
+                    <table className="w-full text-sm table-fixed">
+                      <tbody>
+                        <tr className="border-t border-gray-100 dark:border-gray-700">
+                          <For each={row()?.getVisibleCells() || []}>
+                            {(cell) => (
+                              <td className="px-4 py-3 text-gray-800 dark:text-gray-100">
+                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                              </td>
+                            )}
+                          </For>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                )
+              }}
+            </For>
+          </div>
         </div>
       </div>
 
-      {/* Info-Text über die Tabelle */}
-      <div className="mt-4 text-sm text-gray-600">
-        {table.getRowModel().rows.length} Aufgabe(n) • Klicke auf Spalten-Überschriften zum Sortieren
-      </div>
+      <button
+        type="button"
+        onClick={openCreateModal}
+        className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-600/30 flex items-center justify-center z-40"
+        aria-label="Neue Aufgabe anlegen"
+        title="Neue Aufgabe anlegen"
+      >
+        <Plus size={24} />
+      </button>
 
-      {/* Floating Action Button (FAB) - nur Admins */}
-      {isAdmin && (
-        <button
-          type="button"
-          onClick={openCreateForm}
-          className="fixed bottom-8 right-8 w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center"
-          aria-label="Neue Aufgabe erstellen"
-        >
-          <Plus size={24} />
-        </button>
-      )}
-
-      {/* Modal: Task erstellen/bearbeiten (nur Admin) */}
-      {isAdmin && isFormOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setIsFormOpen(false)} />
-          <div className="relative bg-white dark:bg-gray-800 w-full max-w-lg rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                {editingTaskId ? 'Aufgabe bearbeiten' : 'Neue Aufgabe erstellen'}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setIsFormOpen(false)}
-                className="p-1 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
-                aria-label="Schließen"
-              >
+      <Show when={showCreateModal()}>
+        <div className="fixed inset-0 z-50 bg-gray-900/50 flex items-center justify-center p-4" onClick={() => setShowCreateModal(false)}>
+          <div
+            className="w-full max-w-xl bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Neue Aufgabe</h3>
+              <button type="button" onClick={() => setShowCreateModal(false)} className="text-gray-500 hover:text-gray-800 dark:hover:text-gray-200">
                 <X size={18} />
               </button>
             </div>
 
             <form
+              className="p-5 space-y-4"
               onSubmit={(e) => {
-                e.preventDefault();
-                form.handleSubmit();
+                e.preventDefault()
+                e.stopPropagation()
+                createTaskForm.handleSubmit()
               }}
-              className="space-y-4"
             >
-              <form.Field
-                name="title"
-                validators={{
-                  onChange: ({ value }) =>
-                    !value ? 'Titel ist erforderlich' : undefined,
-                }}
-              >
+              <createTaskForm.AppField name="title">
                 {(field) => (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Titel
-                    </label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Titel</span>
                     <input
-                      type="text"
                       value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="z.B. Mockup erstellen"
+                      onBlur={field.handleBlur}
+                      onInput={(e) => field.handleChange(e.currentTarget.value)}
+                      placeholder="Task Titel"
+                      className="mt-1 w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                     />
-                    {field.state.meta.errors?.length ? (
-                      <p className="text-xs text-red-600 dark:text-red-400 mt-1">
-                        {field.state.meta.errors[0]}
-                      </p>
-                    ) : null}
-                  </div>
+                  </label>
                 )}
-              </form.Field>
+              </createTaskForm.AppField>
 
-              <div className="grid grid-cols-2 gap-4">
-                <form.Field name="status">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <createTaskForm.AppField name="status">
                   {(field) => (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Status
-                      </label>
+                    <label className="block">
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Status</span>
                       <select
                         value={field.state.value}
-                        onChange={(e) => field.handleChange(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        onBlur={field.handleBlur}
+                        onChange={(e) => field.handleChange(e.currentTarget.value)}
+                        className="mt-1 w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                       >
                         <option value="Neu">Neu</option>
                         <option value="in Arbeit">in Arbeit</option>
                         <option value="Erledigt">Erledigt</option>
                       </select>
-                    </div>
+                    </label>
                   )}
-                </form.Field>
+                </createTaskForm.AppField>
 
-                <form.Field name="priority">
+                <createTaskForm.AppField name="priority">
                   {(field) => (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Priorität
-                      </label>
+                    <label className="block">
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Prioritaet</span>
                       <select
                         value={field.state.value}
-                        onChange={(e) => field.handleChange(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        onBlur={field.handleBlur}
+                        onChange={(e) => field.handleChange(e.currentTarget.value)}
+                        className="mt-1 w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                       >
-                        <option value="Niedrig">Niedrig</option>
-                        <option value="Mittel">Mittel</option>
-                        <option value="Hoch">Hoch</option>
+                        <option value="niedrig">niedrig</option>
+                        <option value="mittel">mittel</option>
+                        <option value="hoch">hoch</option>
                       </select>
-                    </div>
+                    </label>
                   )}
-                </form.Field>
+                </createTaskForm.AppField>
               </div>
 
-              <form.Field name="assignee">
-                {(field) => (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Zugewiesen an
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <createTaskForm.AppField name="dueDate">
+                  {(field) => (
+                    <label className="block">
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Faelligkeit</span>
+                      <input
+                        type="date"
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onInput={(e) => field.handleChange(e.currentTarget.value)}
+                        className="mt-1 w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+                      />
                     </label>
-                    <select
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      {userOptions.map((user) => (
-                        <option key={user} value={user}>
-                          {user}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </form.Field>
+                  )}
+                </createTaskForm.AppField>
 
-              <form.Field
-                name="dueDate"
-                validators={{
-                  onChange: ({ value }) =>
-                    !value ? 'Fälligkeitsdatum ist erforderlich' : undefined,
-                }}
-              >
-                {(field) => (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Fällig am
+                <createTaskForm.AppField name="assignedTo">
+                  {(field) => (
+                    <label className="block">
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Zugehoerigkeit</span>
+                      <select
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(e) => field.handleChange(e.currentTarget.value)}
+                        className="mt-1 w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+                      >
+                        <For each={assigneeOptions()}>
+                          {(option) => <option value={option}>{option}</option>}
+                        </For>
+                      </select>
                     </label>
-                    <input
-                      type="date"
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    {field.state.meta.errors?.length ? (
-                      <p className="text-xs text-red-600 dark:text-red-400 mt-1">
-                        {field.state.meta.errors[0]}
-                      </p>
-                    ) : null}
-                  </div>
-                )}
-              </form.Field>
+                  )}
+                </createTaskForm.AppField>
+              </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2">
+              <div className="pt-2 flex items-center justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setIsFormOpen(false)}
-                  className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                  onClick={() => setShowCreateModal(false)}
+                  className="px-4 py-2 rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200"
                 >
                   Abbrechen
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                  className="px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50"
+                  disabled={createTaskMutation.isPending}
                 >
-                  {editingTaskId ? 'Speichern' : 'Erstellen'}
+                  Aufgabe speichern
                 </button>
               </div>
             </form>
           </div>
         </div>
-      )}
-
-
+      </Show>
     </div>
-  );
+  )
 }

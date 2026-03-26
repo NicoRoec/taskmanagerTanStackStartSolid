@@ -1,39 +1,36 @@
-# Task Manager (TanStack Start + React)
+# Task Manager (TanStack Start + Solid)
 
 ## 1) Projektüberblick
 
-Dieses Repository enthält eine Fullstack-Task-Manager-Anwendung auf Basis von TanStack Start, React und SQLite. Der Schwerpunkt liegt auf einer klaren Trennung zwischen Client-UI und serverseitiger Geschäftslogik über TanStack Server Functions.
+Dieses Repository enthält eine Fullstack-Task-Manager-Anwendung auf Basis von TanStack Start, Solid und SQLite. Der Schwerpunkt liegt auf einer klaren Trennung zwischen Client-UI und serverseitiger Geschäftslogik über TanStack Server Functions.
 
-Die Anwendung bietet Rollen (Admin/User), Aufgabenverwaltung mit Soft Delete (Papierkorb), Dashboard-Kennzahlen sowie einen Admin-Bereich zur Nutzerverwaltung. Obwohl im Projektkontext häufig „Solid“ erwähnt wird, ist die konkrete Implementierung hier React-basiert.
+Die Anwendung bietet Rollen (Admin/User), Aufgabenverwaltung mit Soft Delete (Papierkorb), Dashboard-Kennzahlen sowie einen Admin-Bereich zur Nutzerverwaltung.
 
 ## 2) Tech-Stack
 
 - Runtime/Build: Vite, TanStack Start, Nitro, Node.js
-- UI: React, Tailwind CSS, Lucide Icons
+- UI: Solid, Tailwind CSS, Lucide Icons
 - Datenbank: SQLite (`sqlite3`)
 - Validierung: Zod
 - Tests: Vitest
 
 ### TanStack (tatsächlich genutzt)
 
-- Wir nutzen `@tanstack/react-start` für Server Functions (Auth, Task- und User-Operationen).
-- Wir nutzen `@tanstack/react-router` für file-based Routing, Navigation, Route Guards und URL-Search-State.
-- Wir nutzen `@tanstack/react-router-ssr-query` für die Integration von Router und Query-Client im SSR-Kontext.
-- Wir nutzen `@tanstack/react-query` für Datenladen, Mutationen, Caching und Invalidation.
-- Wir nutzen `@tanstack/react-form` für Form-State und Validierung (Login, Aufgaben, Admin-Nutzer).
-- Wir nutzen `@tanstack/react-table` für headless Tabellenlogik (Sortierung, Rendering, Actions).
-- Wir nutzen `@tanstack/react-virtual` für Listen-Virtualisierung in der Aufgabenansicht.
-- Wir nutzen `@tanstack/store` + `@tanstack/react-store` für globalen Theme-State (Dark/Light).
-- Wir nutzen `@tanstack/react-devtools`, `@tanstack/react-router-devtools`, `@tanstack/react-query-devtools`, `@tanstack/devtools-event-client` für Devtools-Integration.
+- Wir nutzen `@tanstack/solid-start` für Server Functions (Auth, Task- und User-Operationen).
+- Wir nutzen `@tanstack/solid-router` für file-based Routing, Navigation, Route Guards und URL-Search-State.
+- Wir nutzen `@tanstack/solid-router-ssr-query` für die Integration von Router und Query-Client im SSR-Kontext.
+- Wir nutzen `@tanstack/solid-query` für Datenladen, Mutationen, Caching und Invalidation.
+- Wir nutzen `@tanstack/store` + `@tanstack/solid-store` für globalen Theme-State (Dark/Light).
+- Wir nutzen `@tanstack/solid-devtools`, `@tanstack/solid-router-devtools`, `@tanstack/solid-query-devtools`, `@tanstack/devtools-event-client` für Devtools-Integration.
 - Wir nutzen `@tanstack/devtools-vite` in der Vite-Konfiguration.
 
 ### Installiert, aber im App-Flow nicht genutzt
 
 - `@tanstack/db`
 - `@tanstack/router-plugin`
-- `@tanstack/solid-form`
-- `@tanstack/solid-query`
-- `@tanstack/solid-table`
+- `@tanstack/solid-form` (aktuell nicht in Kernseiten verwendet)
+- `@tanstack/solid-table` (aktuell nicht in Kernseiten verwendet)
+- `@tanstack/solid-virtual` (aktuell nicht in Kernseiten verwendet)
 - `@tanstack/match-sorter-utils` (nur in Demo-Dateien unter `src/routes/demo`)
 
 ## 3) Setup & Start
@@ -94,7 +91,7 @@ Hinweis: Zusätzlich gibt es Seed-Einträge in der `users`-Tabelle (z. B. `Max M
 
 ## 5) Features
 
-- Aufgabenliste (`/aufgaben`) mit Suche (URL-gebunden), Sortierung, Erstellen, Bearbeiten, Soft Delete
+- Aufgabenliste (`/aufgaben`) mit Erstellen, Bearbeiten, Soft Delete
 - Dashboard (`/dashboard`) mit Status-KPIs und letzten Aktivitäten
 - Papierkorb (`/papierkorb`) mit Wiederherstellen und (nur Admin) endgültigem Löschen
 - Admin-Nutzerverwaltung (`/admin/nutzer`) mit Create/Update/Delete
@@ -144,10 +141,8 @@ Hinweis: Zusätzlich gibt es Seed-Einträge in der `users`-Tabelle (z. B. `Max M
 
 ### Form/Table/Query Zusammenspiel
 
-- `react-form` steuert Eingaben + Validierung
-- `react-query` lädt Daten und führt Mutationen aus
-- `react-table` rendert Tabellenlogik headless
-- `react-virtual` optimiert große Tasklisten
+- `solid-query` lädt Daten und führt Mutationen aus
+- Kernseiten sind auf Solid-Signale und Solid-Komponenten umgestellt
 
 ## 8) Sicherheitsregeln
 
