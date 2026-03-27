@@ -7,7 +7,7 @@ import { createVirtualizer } from '@tanstack/solid-virtual'
 import { getSessionInfo } from '../../../server/auth-functions'
 import { createUser, deleteUser, getUsersForAdmin, updateUser } from '../../../server/user-functions'
 import { useAuth } from '../../__root'
-import { useAppForm } from '../../../hooks/demo.form'
+import { useAppForm } from '../../../hooks/app.form'
 
 export const Route = createFileRoute('/_layout/admin/nutzer')({
   component: AdminNutzerPage,
@@ -107,7 +107,7 @@ function AdminNutzerPage() {
 
   async function handleDeleteUser(user) {
     if (!auth.session?.sessionId) return
-    const ok = window.confirm(`Nutzer ${user.name} loeschen?`)
+    const ok = window.confirm(`Nutzer ${user.name} löschen?`)
     if (!ok) return
 
     await deleteUserMutation.mutateAsync({
@@ -197,6 +197,7 @@ function AdminNutzerPage() {
   })
 
   function sortIcon(column) {
+    sorting()
     const isSorted = column.getIsSorted()
     if (isSorted === 'asc') return <ArrowUp size={14} />
     if (isSorted === 'desc') return <ArrowDown size={14} />

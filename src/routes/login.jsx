@@ -127,7 +127,7 @@ function LoginPage() {
               </button>
             </form>
 
-            {/* Demo Credentials */}
+            {/* Zugangsdaten */}
             <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-6">
               <p className="text-xs text-gray-600 font-medium mb-2">Test-Zugangsdaten:</p>
               <div className="space-y-1 text-xs text-gray-600 dark:text-gray-300">
@@ -147,7 +147,7 @@ function LoginPage() {
         {/* Info Text */}
         <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-900/50 dark:bg-blue-950/30">
           <p className="text-xs text-blue-800 dark:text-blue-200">
-            <strong>Server-Funktion Demo:</strong> Das Passwort wird sicher auf dem Server validiert,
+            <strong>Server-Funktion:</strong> Das Passwort wird sicher auf dem Server validiert,
             nicht im Browser. Die Session-ID wird nur zum Client zurückgegeben.
           </p>
         </div>

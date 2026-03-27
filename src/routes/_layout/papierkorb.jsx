@@ -34,12 +34,16 @@ function PapierkorbPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks', 'trash'] })
       queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
     },
   }))
 
   const deleteForeverMutation = useMutation(() => ({
     mutationFn: (payload) => permanentlyDeleteTask({ data: payload }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tasks', 'trash'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks', 'trash'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
   }))
 
   async function handleRestore(taskId) {
@@ -49,7 +53,7 @@ function PapierkorbPage() {
 
   async function handleDeleteForever(taskId) {
     if (!auth.session?.sessionId || !auth.isAdmin) return
-    const ok = window.confirm('Task endgueltig loeschen?')
+    const ok = window.confirm('Task endgültig löschen?')
     if (!ok) return
     await deleteForeverMutation.mutateAsync({ sessionId: auth.session.sessionId, taskId })
   }
@@ -75,7 +79,7 @@ function PapierkorbPage() {
     },
     {
       accessorKey: 'priority',
-      header: 'Prioritaet',
+      header: 'Priorität',
       cell: (info) => info.getValue() || '-',
     },
     {
@@ -130,6 +134,7 @@ function PapierkorbPage() {
   })
 
   function sortIcon(column) {
+    sorting()
     const isSorted = column.getIsSorted()
     if (isSorted === 'asc') return <ArrowUp size={14} />
     if (isSorted === 'desc') return <ArrowDown size={14} />
@@ -140,13 +145,13 @@ function PapierkorbPage() {
     <div className="h-full min-h-0 flex flex-col gap-6">
       <div>
         <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Papierkorb</h2>
-        <p className="text-sm text-gray-600 dark:text-gray-400">Geloeschte Aufgaben wiederherstellen oder dauerhaft entfernen.</p>
+        <p className="text-sm text-gray-600 dark:text-gray-400">Gelöschte Aufgaben wiederherstellen oder dauerhaft entfernen.</p>
       </div>
 
       <div className="flex items-start gap-3 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-3 text-amber-900 dark:text-amber-200">
         <AlertCircle size={18} className="mt-0.5 shrink-0" />
         <p className="text-sm">
-          Nur Admins duerfen Aufgaben endgueltig loeschen. Normale Nutzer koennen Aufgaben hier nur wiederherstellen.
+          Nur Admins dürfen Aufgaben endgültig löschen. Normale Nutzer können Aufgaben hier nur wiederherstellen.
         </p>
       </div>
 

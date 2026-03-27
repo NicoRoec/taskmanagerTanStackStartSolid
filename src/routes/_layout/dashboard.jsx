@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/solid-router';
 import { useQuery } from '@tanstack/solid-query';
-import { createMemo, For } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount } from 'solid-js';
+import { createCollection, localOnlyCollectionOptions } from '@tanstack/db';
 import { useAuth } from '../__root';
 import { getDashboardData } from '../../server/task-functions';
 
@@ -8,8 +9,16 @@ export const Route = createFileRoute('/_layout/dashboard')({
   component: DashboardPage,
 });
 
+const activitiesCollection = createCollection(
+  localOnlyCollectionOptions({
+    id: 'dashboard-activities',
+    getKey: (item) => item.id,
+  }),
+)
+
 function DashboardPage() {
   const auth = useAuth();
+  const [activityRows, setActivityRows] = createSignal([])
 
   /**
    * TanStack Query für Dashboard
@@ -35,7 +44,28 @@ function DashboardPage() {
     done: 0,
   });
 
-  const activities = createMemo(() => dashboardQuery.data?.activities || []);
+  const activities = createMemo(() => activityRows());
+
+  onMount(() => {
+    const subscription = activitiesCollection.subscribeChanges(() => {
+      setActivityRows([...activitiesCollection.values()])
+    }, { includeInitialState: true })
+
+    onCleanup(() => subscription.unsubscribe())
+  })
+
+  createEffect(() => {
+    const next = dashboardQuery.data?.activities || []
+    const existingKeys = [...activitiesCollection.keys()]
+
+    if (existingKeys.length) {
+      activitiesCollection.delete(existingKeys)
+    }
+
+    if (next.length) {
+      activitiesCollection.insert(next)
+    }
+  })
 
   function formatRelativeDate(value) {
     if (!value) return '—';
@@ -55,8 +85,9 @@ function DashboardPage() {
   }
 
   function getActivityColor(status) {
-    if (status === 'Erledigt') return 'bg-green-500';
-    if (status === 'in Arbeit') return 'bg-yellow-500';
+    const normalized = String(status || '').trim().toLowerCase();
+    if (normalized === 'erledigt') return 'bg-green-500';
+    if (normalized === 'in arbeit') return 'bg-yellow-500';
     return 'bg-blue-500';
   }
 

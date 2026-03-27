@@ -7,7 +7,7 @@ import { createVirtualizer } from '@tanstack/solid-virtual'
 import { useAuth } from '../__root'
 import { getTasksForList, createTask, updateTask, deleteTask } from '../../server/task-functions'
 import { getUsersForAdmin } from '../../server/user-functions'
-import { useAppForm } from '../../hooks/demo.form'
+import { useAppForm } from '../../hooks/app.form'
 
 export const Route = createFileRoute('/_layout/aufgaben')({
   component: AufgabenPage,
@@ -20,6 +20,7 @@ function AufgabenPage() {
   const [debouncedSearch, setDebouncedSearch] = createSignal('')
   const [filterType, setFilterType] = createSignal('all')
   const [showCreateModal, setShowCreateModal] = createSignal(false)
+  const [editingTask, setEditingTask] = createSignal(null)
   const [sorting, setSorting] = createSignal([])
   let scrollContainerRef
 
@@ -59,12 +60,18 @@ function AufgabenPage() {
 
   const createTaskMutation = useMutation(() => ({
     mutationFn: (payload) => createTask({ data: payload }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
   }))
 
   const updateTaskMutation = useMutation(() => ({
     mutationFn: (payload) => updateTask({ data: payload }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
   }))
 
   const deleteTaskMutation = useMutation(() => ({
@@ -72,6 +79,7 @@ function AufgabenPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] })
       queryClient.invalidateQueries({ queryKey: ['tasks', 'trash'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
     },
   }))
 
@@ -85,15 +93,32 @@ function AufgabenPage() {
     },
     onSubmit: async ({ value }) => {
       if (!auth.session?.sessionId) return
-      await createTaskMutation.mutateAsync({
-        sessionId: auth.session.sessionId,
-        title: value.title,
-        status: value.status,
-        priority: value.priority,
-        dueDate: value.dueDate,
-        assignedTo: value.assignedTo,
-      })
-      setShowCreateModal(false)
+      const normalizedStatus = normalizeStatus(value.status)
+      const normalizedPriority = normalizePriority(value.priority)
+      const normalizedAssignedTo = normalizeAssignee(value.assignedTo)
+      const taskToEdit = editingTask()
+      if (taskToEdit) {
+        await updateTaskMutation.mutateAsync({
+          sessionId: auth.session.sessionId,
+          taskId: taskToEdit.id,
+          title: value.title,
+          status: normalizedStatus,
+          priority: normalizedPriority,
+          dueDate: value.dueDate,
+          assignedTo: normalizedAssignedTo,
+        })
+      } else {
+        await createTaskMutation.mutateAsync({
+          sessionId: auth.session.sessionId,
+          title: value.title,
+          status: normalizedStatus,
+          priority: normalizedPriority,
+          dueDate: value.dueDate,
+          assignedTo: normalizedAssignedTo,
+        })
+      }
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      closeTaskModal()
       createTaskForm.reset()
     },
   }))
@@ -101,15 +126,24 @@ function AufgabenPage() {
   const tasks = createMemo(() => tasksQuery.data || [])
 
   const assigneeOptions = createMemo(() => {
-    const names = new Set()
-    names.add(auth.session?.username || 'Admin')
+    const unique = new Map()
+
+    const addName = (name) => {
+      const normalized = normalizeAssignee(name)
+      const key = normalized.toLowerCase()
+      if (!unique.has(key)) {
+        unique.set(key, normalized)
+      }
+    }
+
+    addName(auth.session?.username || 'Admin')
     if (auth.isAdmin) {
       for (const user of usersQuery.data || []) {
-        names.add(user.name)
+        addName(user.name)
       }
-      names.add('Admin')
+      addName('Admin')
     }
-    return [...names]
+    return [...unique.values()]
   })
 
   const columns = createMemo(() => [
@@ -127,22 +161,22 @@ function AufgabenPage() {
     {
       accessorKey: 'status',
       header: 'Status',
-      cell: (info) => info.getValue() || '-',
+      cell: (info) => formatStatus(info.getValue()),
     },
     {
       accessorKey: 'priority',
-      header: 'Prioritaet',
-      cell: (info) => info.getValue() || '-',
+      header: 'Priorität',
+      cell: (info) => formatPriority(info.getValue()),
     },
     {
       accessorKey: 'dueDate',
-      header: 'Faellig',
+      header: 'Fällig',
       cell: (info) => info.getValue() || '-',
     },
     {
       accessorKey: 'assignee',
-      header: 'Zugehoerigkeit',
-      cell: (info) => info.getValue() || '-',
+      header: 'Zugehörigkeit',
+      cell: (info) => normalizeAssignee(info.getValue()),
     },
     {
       id: 'actions',
@@ -189,31 +223,85 @@ function AufgabenPage() {
   })
 
   function sortIcon(column) {
+    sorting()
     const isSorted = column.getIsSorted()
     if (isSorted === 'asc') return <ArrowUp size={14} />
     if (isSorted === 'desc') return <ArrowDown size={14} />
     return <ArrowUpDown size={14} className="text-gray-400" />
   }
 
+  function normalizeStatus(value) {
+    const lowered = String(value || '').trim().toLowerCase()
+    if (lowered === 'neu') return 'Neu'
+    if (lowered === 'in arbeit') return 'In Arbeit'
+    if (lowered === 'erledigt') return 'Erledigt'
+    return value || 'Neu'
+  }
+
+  function normalizePriority(value) {
+    const lowered = String(value || '').trim().toLowerCase()
+    if (lowered === 'niedrig') return 'Niedrig'
+    if (lowered === 'mittel') return 'Mittel'
+    if (lowered === 'hoch') return 'Hoch'
+    return value || 'Mittel'
+  }
+
+  function normalizeAssignee(value) {
+    const trimmed = String(value || '').trim()
+    if (!trimmed) return 'Admin'
+    if (trimmed.toLowerCase() === 'admin') return 'Admin'
+    return trimmed
+  }
+
+  function formatStatus(value) {
+    return normalizeStatus(value)
+  }
+
+  function formatPriority(value) {
+    return normalizePriority(value)
+  }
+
+  function resolveFieldApi(field) {
+    return typeof field === 'function' ? field() : field
+  }
+
+  function closeTaskModal() {
+    setShowCreateModal(false)
+    setEditingTask(null)
+  }
+
+  createEffect(() => {
+    if (!showCreateModal()) return
+    const task = editingTask()
+    if (!task) return
+
+    // Ensure fields are mounted before applying values the first time.
+    const timer = setTimeout(() => {
+      if (!showCreateModal() || !editingTask()) return
+      const dueDateValue = typeof task.dueDate === 'string' ? task.dueDate.slice(0, 10) : ''
+      createTaskForm.reset()
+      createTaskForm.setFieldValue('title', task.title || '')
+      createTaskForm.setFieldValue('status', normalizeStatus(task.status || 'Neu'))
+      createTaskForm.setFieldValue('priority', normalizePriority(task.priority || 'Mittel'))
+      createTaskForm.setFieldValue('dueDate', dueDateValue)
+      createTaskForm.setFieldValue('assignedTo', normalizeAssignee(task.assignee || auth.session?.username || 'Admin'))
+    }, 0)
+
+    onCleanup(() => clearTimeout(timer))
+  })
+
   function openCreateModal() {
+    setEditingTask(null)
     setShowCreateModal(true)
     createTaskForm.reset()
-    createTaskForm.setFieldValue('assignedTo', auth.session?.username || 'Admin')
+    createTaskForm.setFieldValue('status', 'Neu')
+    createTaskForm.setFieldValue('priority', 'Mittel')
+    createTaskForm.setFieldValue('assignedTo', normalizeAssignee(auth.session?.username || 'Admin'))
   }
 
   async function handleEditTask(task) {
-    if (!auth.session?.sessionId) return
-    const nextTitle = window.prompt('Titel bearbeiten', task.title)
-    if (!nextTitle) return
-    await updateTaskMutation.mutateAsync({
-      sessionId: auth.session.sessionId,
-      taskId: task.id,
-      title: nextTitle,
-      status: task.status || 'Neu',
-      priority: task.priority || 'mittel',
-      dueDate: task.dueDate,
-      assignedTo: task.assignee || auth.session.username,
-    })
+    setEditingTask(task)
+    setShowCreateModal(true)
   }
 
   async function handleDeleteTask(taskId) {
@@ -235,7 +323,7 @@ function AufgabenPage() {
         <input
           value={searchInput()}
           onInput={(e) => setSearchInput(e.currentTarget.value)}
-          placeholder="Suche nach Titel oder Zugehoerigkeit..."
+          placeholder="Suche nach Titel oder Zugehörigkeit..."
           className="px-3 py-2 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 w-full max-w-md"
         />
         <select
@@ -323,14 +411,14 @@ function AufgabenPage() {
       </button>
 
       <Show when={showCreateModal()}>
-        <div className="fixed inset-0 z-50 bg-gray-900/50 flex items-center justify-center p-4" onClick={() => setShowCreateModal(false)}>
+        <div className="fixed inset-0 z-50 bg-gray-900/50 flex items-center justify-center p-4" onClick={closeTaskModal}>
           <div
             className="w-full max-w-xl bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Neue Aufgabe</h3>
-              <button type="button" onClick={() => setShowCreateModal(false)} className="text-gray-500 hover:text-gray-800 dark:hover:text-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{editingTask() ? 'Aufgabe bearbeiten' : 'Neue Aufgabe'}</h3>
+              <button type="button" onClick={closeTaskModal} className="text-gray-500 hover:text-gray-800 dark:hover:text-gray-200">
                 <X size={18} />
               </button>
             </div>
@@ -344,97 +432,112 @@ function AufgabenPage() {
               }}
             >
               <createTaskForm.AppField name="title">
-                {(field) => (
-                  <label className="block">
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Titel</span>
-                    <input
-                      value={field.state.value}
-                      onBlur={field.handleBlur}
-                      onInput={(e) => field.handleChange(e.currentTarget.value)}
-                      placeholder="Task Titel"
-                      className="mt-1 w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-                    />
-                  </label>
-                )}
+                {(field) => {
+                  const api = () => resolveFieldApi(field)
+                  return (
+                    <label className="block">
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Titel</span>
+                      <input
+                        value={api()?.state?.value ?? ''}
+                        onBlur={() => api()?.handleBlur?.()}
+                        onInput={(e) => api()?.handleChange?.(e.currentTarget.value)}
+                        placeholder="Task Titel"
+                        className="mt-1 w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+                      />
+                    </label>
+                  )
+                }}
               </createTaskForm.AppField>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <createTaskForm.AppField name="status">
-                  {(field) => (
-                    <label className="block">
-                      <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Status</span>
-                      <select
-                        value={field.state.value}
-                        onBlur={field.handleBlur}
-                        onChange={(e) => field.handleChange(e.currentTarget.value)}
-                        className="mt-1 w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-                      >
-                        <option value="Neu">Neu</option>
-                        <option value="in Arbeit">in Arbeit</option>
-                        <option value="Erledigt">Erledigt</option>
-                      </select>
-                    </label>
-                  )}
+                  {(field) => {
+                    const api = () => resolveFieldApi(field)
+                    return (
+                      <label className="block">
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Status</span>
+                        <select
+                          value={api()?.state?.value ?? 'Neu'}
+                          onBlur={() => api()?.handleBlur?.()}
+                          onChange={(e) => api()?.handleChange?.(e.currentTarget.value)}
+                          className="mt-1 w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+                        >
+                          <option value="Neu">Neu</option>
+                          <option value="In Arbeit">In Arbeit</option>
+                          <option value="Erledigt">Erledigt</option>
+                        </select>
+                      </label>
+                    )
+                  }}
                 </createTaskForm.AppField>
 
                 <createTaskForm.AppField name="priority">
-                  {(field) => (
-                    <label className="block">
-                      <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Prioritaet</span>
-                      <select
-                        value={field.state.value}
-                        onBlur={field.handleBlur}
-                        onChange={(e) => field.handleChange(e.currentTarget.value)}
-                        className="mt-1 w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-                      >
-                        <option value="niedrig">niedrig</option>
-                        <option value="mittel">mittel</option>
-                        <option value="hoch">hoch</option>
-                      </select>
-                    </label>
-                  )}
+                  {(field) => {
+                    const api = () => resolveFieldApi(field)
+                    return (
+                      <label className="block">
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Priorität</span>
+                        <select
+                          value={api()?.state?.value ?? 'Mittel'}
+                          onBlur={() => api()?.handleBlur?.()}
+                          onChange={(e) => api()?.handleChange?.(e.currentTarget.value)}
+                          className="mt-1 w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+                        >
+                          <option value="Niedrig">Niedrig</option>
+                          <option value="Mittel">Mittel</option>
+                          <option value="Hoch">Hoch</option>
+                        </select>
+                      </label>
+                    )
+                  }}
                 </createTaskForm.AppField>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <createTaskForm.AppField name="dueDate">
-                  {(field) => (
-                    <label className="block">
-                      <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Faelligkeit</span>
-                      <input
-                        type="date"
-                        value={field.state.value}
-                        onBlur={field.handleBlur}
-                        onInput={(e) => field.handleChange(e.currentTarget.value)}
-                        className="mt-1 w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-                      />
-                    </label>
-                  )}
+                  {(field) => {
+                    const api = () => resolveFieldApi(field)
+                    return (
+                      <label className="block">
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Fälligkeit</span>
+                        <input
+                          type="date"
+                          value={api()?.state?.value ?? ''}
+                          onBlur={() => api()?.handleBlur?.()}
+                          onInput={(e) => api()?.handleChange?.(e.currentTarget.value)}
+                          className="mt-1 w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+                        />
+                      </label>
+                    )
+                  }}
                 </createTaskForm.AppField>
 
                 <createTaskForm.AppField name="assignedTo">
-                  {(field) => (
-                    <label className="block">
-                      <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Zugehoerigkeit</span>
-                      <select
-                        value={field.state.value}
-                        onBlur={field.handleBlur}
-                        onChange={(e) => field.handleChange(e.currentTarget.value)}
-                        className="mt-1 w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-                      >
-                        <For each={assigneeOptions()}>
-                          {(option) => <option value={option}>{option}</option>}
-                        </For>
-                      </select>
-                    </label>
-                  )}
+                  {(field) => {
+                    const api = () => resolveFieldApi(field)
+                    return (
+                      <label className="block">
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Zugehörigkeit</span>
+                        <select
+                          value={api()?.state?.value ?? ''}
+                          onBlur={() => api()?.handleBlur?.()}
+                          onChange={(e) => api()?.handleChange?.(e.currentTarget.value)}
+                          className="mt-1 w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+                        >
+                          <For each={assigneeOptions()}>
+                            {(option) => <option value={option}>{option}</option>}
+                          </For>
+                        </select>
+                      </label>
+                    )
+                  }}
                 </createTaskForm.AppField>
               </div>
 
               <div className="pt-2 flex items-center justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setShowCreateModal(false)}
+                  onClick={closeTaskModal}
                   className="px-4 py-2 rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200"
                 >
                   Abbrechen
@@ -442,9 +545,9 @@ function AufgabenPage() {
                 <button
                   type="submit"
                   className="px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50"
-                  disabled={createTaskMutation.isPending}
+                  disabled={createTaskMutation.isPending || updateTaskMutation.isPending}
                 >
-                  Aufgabe speichern
+                  {editingTask() ? 'Änderungen speichern' : 'Aufgabe speichern'}
                 </button>
               </div>
             </form>

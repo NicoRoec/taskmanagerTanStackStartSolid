@@ -117,9 +117,9 @@ export const getDashboardData = createServerFn({ method: 'POST' })
     const statsRow = await get(
       db,
       `SELECT
-         SUM(CASE WHEN status = 'Neu' THEN 1 ELSE 0 END) AS open,
-         SUM(CASE WHEN status = 'in Arbeit' THEN 1 ELSE 0 END) AS inProgress,
-         SUM(CASE WHEN status = 'Erledigt' THEN 1 ELSE 0 END) AS done
+         SUM(CASE WHEN lower(status) = 'neu' THEN 1 ELSE 0 END) AS open,
+         SUM(CASE WHEN lower(status) = 'in arbeit' THEN 1 ELSE 0 END) AS inProgress,
+         SUM(CASE WHEN lower(status) = 'erledigt' THEN 1 ELSE 0 END) AS done
        FROM tasks
        ${whereClause}`,
       params
