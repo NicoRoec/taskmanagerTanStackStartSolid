@@ -6,6 +6,26 @@ import { useAuth } from './__root';
 
 export const Route = createFileRoute('/login')({
   component: LoginPage,
+  pendingComponent: () => (
+    <div className="flex min-h-screen items-center justify-center bg-gray-100 dark:bg-gray-900 px-4">
+      <div className="w-full max-w-md">
+        <div className="rounded-lg border border-blue-300 bg-blue-50 p-4 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-100">
+          <p className="font-semibold mb-1">Login wird vorbereitet...</p>
+          <p className="text-xs opacity-75">Bitte warten Sie einen Moment.</p>
+        </div>
+      </div>
+    </div>
+  ),
+  errorComponent: ({ error }) => (
+    <div className="flex min-h-screen items-center justify-center bg-gray-100 dark:bg-gray-900 px-4">
+      <div className="w-full max-w-md">
+        <div className="rounded-lg border border-red-300 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/30">
+          <h3 className="font-semibold text-red-900 dark:text-red-100 mb-2">Fehler in Login-Route</h3>
+          <p className="text-sm text-red-800 dark:text-red-200">{error?.message ? String(error.message) : String(error)}</p>
+        </div>
+      </div>
+    </div>
+  ),
 });
 
 function LoginPage() {

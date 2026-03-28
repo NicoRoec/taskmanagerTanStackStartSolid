@@ -6,9 +6,36 @@ import { createSolidTable, flexRender, getCoreRowModel, getSortedRowModel } from
 import { createVirtualizer } from '@tanstack/solid-virtual'
 import { useAuth } from '../__root'
 import { getTasksForTrash, permanentlyDeleteTask, restoreTask } from '../../server/task-functions'
+import { qk } from '../../lib/query-keys'
+
+function getSessionIdFromCookie() {
+  if (typeof document === 'undefined') return null
+  const match = document.cookie
+    .split(';')
+    .map((c) => c.trim())
+    .find((c) => c.startsWith('task_session='))
+  return match ? decodeURIComponent(match.split('=')[1]) : null
+}
 
 export const Route = createFileRoute('/_layout/papierkorb')({
   component: PapierkorbPage,
+  pendingComponent: () => <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-600">Papierkorb wird geladen...</div>,
+  errorComponent: ({ error }) => (
+    <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-red-900">
+      <h3 className="mb-2 font-semibold">Fehler in Papierkorb-Route</h3>
+      <p>{error?.message ? String(error.message) : String(error)}</p>
+    </div>
+  ),
+  loader: async ({ context }) => {
+    const sessionId = getSessionIdFromCookie()
+    if (!sessionId) return
+
+    await context.queryClient.ensureQueryData({
+      queryKey: qk.tasksTrash(sessionId),
+      queryFn: () => getTasksForTrash({ data: { sessionId } }),
+      staleTime: 20 * 1000,
+    })
+  },
 })
 
 function PapierkorbPage() {
@@ -20,7 +47,7 @@ function PapierkorbPage() {
   const ROW_HEIGHT = 52
 
   const trashQuery = useQuery(() => ({
-    queryKey: ['tasks', 'trash', auth.session?.sessionId ?? null],
+    queryKey: qk.tasksTrash(auth.session?.sessionId),
     enabled: Boolean(auth.session?.sessionId),
     queryFn: () => getTasksForTrash({ data: { sessionId: auth.session?.sessionId } }),
     placeholderData: (previousData) => previousData,
@@ -32,17 +59,17 @@ function PapierkorbPage() {
   const restoreMutation = useMutation(() => ({
     mutationFn: (payload) => restoreTask({ data: payload }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks', 'trash'] })
-      queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] })
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      queryClient.invalidateQueries({ queryKey: qk.tasksTrashRoot() })
+      queryClient.invalidateQueries({ queryKey: qk.tasksListRoot() })
+      queryClient.invalidateQueries({ queryKey: qk.dashboardRoot() })
     },
   }))
 
   const deleteForeverMutation = useMutation(() => ({
     mutationFn: (payload) => permanentlyDeleteTask({ data: payload }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks', 'trash'] })
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      queryClient.invalidateQueries({ queryKey: qk.tasksTrashRoot() })
+      queryClient.invalidateQueries({ queryKey: qk.dashboardRoot() })
     },
   }))
 

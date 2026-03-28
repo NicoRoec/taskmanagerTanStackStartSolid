@@ -180,11 +180,29 @@ function LayoutComponent() {
 
 export const Route = createFileRoute('/_layout')({
   component: LayoutComponent,
+  pendingComponent: () => (
+    <div className="flex h-screen items-center justify-center bg-gray-100 dark:bg-gray-900">
+      <div className="text-center">
+        <div className="mb-4 flex justify-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600"></div>
+        </div>
+        <p className="text-sm text-gray-600 dark:text-gray-300">Layout wird geladen...</p>
+      </div>
+    </div>
+  ),
   errorComponent: ({ error }) => (
-    <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-red-900">
-      <h3 className="font-semibold mb-2">Fehler in Layout-Route</h3>
-      <p className="mb-2">{error?.message ? String(error.message) : String(error)}</p>
-      <pre className="text-xs whitespace-pre-wrap">{error?.stack ? String(error.stack) : ''}</pre>
+    <div className="flex h-screen items-center justify-center bg-gray-100 dark:bg-gray-900 px-4">
+      <div className="w-full max-w-md">
+        <div className="rounded-lg border border-red-300 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/30">
+          <h3 className="font-semibold text-red-900 dark:text-red-100 mb-2">Fehler in Layout-Route</h3>
+          <p className="text-sm text-red-800 dark:text-red-200 mb-2">{error?.message ? String(error.message) : String(error)}</p>
+          {error?.stack && (
+            <pre className="text-xs whitespace-pre-wrap text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-950/50 p-2 rounded overflow-auto max-h-32">
+              {String(error.stack)}
+            </pre>
+          )}
+        </div>
+      </div>
     </div>
   ),
   beforeLoad: async () => {

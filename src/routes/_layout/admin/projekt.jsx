@@ -1,5 +1,4 @@
-import { createFileRoute } from '@tanstack/solid-router'
-// import { redirect } from '@tanstack/solid-router'; // Falls redirect benötigt wird, bitte von solid-router importieren
+import { createFileRoute, redirect } from '@tanstack/solid-router'
 import { FolderPlus, Settings, Archive } from 'lucide-solid';
 import { getSessionInfo } from '../../../server/auth-functions';
 
@@ -35,6 +34,17 @@ import { getSessionInfo } from '../../../server/auth-functions';
 
 export const Route = createFileRoute('/_layout/admin/projekt')({
   component: AdminProjektPage,
+  pendingComponent: () => (
+    <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-600">
+      Projekte werden geladen...
+    </div>
+  ),
+  errorComponent: ({ error }) => (
+    <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-red-900">
+      <h3 className="mb-2 font-semibold">Fehler in Projekt-Route</h3>
+      <p>{error?.message ? String(error.message) : String(error)}</p>
+    </div>
+  ),
   /**
    * beforeLoad: Route-Schutz für Admin-Only Zugriff
    * 

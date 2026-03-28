@@ -4,9 +4,39 @@ import { createEffect, createMemo, createSignal, For, onCleanup, onMount } from 
 import { createCollection, localOnlyCollectionOptions } from '@tanstack/db';
 import { useAuth } from '../__root';
 import { getDashboardData } from '../../server/task-functions';
+import { qk } from '../../lib/query-keys';
+
+function getSessionIdFromCookie() {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie
+    .split(';')
+    .map((c) => c.trim())
+    .find((c) => c.startsWith('task_session='));
+  return match ? decodeURIComponent(match.split('=')[1]) : null;
+}
 
 export const Route = createFileRoute('/_layout/dashboard')({
   component: DashboardPage,
+  pendingComponent: () => <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-600">Dashboard wird geladen...</div>,
+  errorComponent: ({ error }) => (
+    <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-red-900">
+      <h3 className="mb-2 font-semibold">Fehler in Dashboard-Route</h3>
+      <p>{error?.message ? String(error.message) : String(error)}</p>
+    </div>
+  ),
+  loader: async ({ context }) => {
+    const sessionId = getSessionIdFromCookie();
+    if (!sessionId) return;
+
+    await context.queryClient.ensureQueryData({
+      queryKey: qk.dashboard(sessionId),
+      queryFn: () =>
+        getDashboardData({
+          data: { sessionId },
+        }),
+      staleTime: 60 * 1000,
+    });
+  },
 });
 
 const activitiesCollection = createCollection(
@@ -27,7 +57,7 @@ function DashboardPage() {
    * über eine Server Function.
    */
   const dashboardQuery = useQuery(() => ({
-    queryKey: ['dashboard', auth.session?.sessionId ?? null],
+    queryKey: qk.dashboard(auth.session?.sessionId),
     enabled: Boolean(auth.session?.sessionId),
     queryFn: () =>
       getDashboardData({

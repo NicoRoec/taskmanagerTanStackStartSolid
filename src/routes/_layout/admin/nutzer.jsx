@@ -8,9 +8,37 @@ import { getSessionInfo } from '../../../server/auth-functions'
 import { createUser, deleteUser, getUsersForAdmin, updateUser } from '../../../server/user-functions'
 import { useAuth } from '../../__root'
 import { useAppForm } from '../../../hooks/app.form'
+import { FormSelectField, FormTextField } from '../../../components/FormFields'
+import { qk } from '../../../lib/query-keys'
+
+function getSessionIdFromCookie() {
+  if (typeof document === 'undefined') return null
+  const match = document.cookie
+    .split(';')
+    .map((c) => c.trim())
+    .find((c) => c.startsWith('task_session='))
+  return match ? decodeURIComponent(match.split('=')[1]) : null
+}
 
 export const Route = createFileRoute('/_layout/admin/nutzer')({
   component: AdminNutzerPage,
+  pendingComponent: () => <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-600">Nutzer werden geladen...</div>,
+  errorComponent: ({ error }) => (
+    <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-red-900">
+      <h3 className="mb-2 font-semibold">Fehler in Nutzer-Route</h3>
+      <p>{error?.message ? String(error.message) : String(error)}</p>
+    </div>
+  ),
+  loader: async ({ context }) => {
+    const sessionId = getSessionIdFromCookie()
+    if (!sessionId) return
+
+    await context.queryClient.ensureQueryData({
+      queryKey: qk.adminUsers(sessionId),
+      queryFn: () => getUsersForAdmin({ data: { sessionId } }),
+      staleTime: 30 * 1000,
+    })
+  },
   beforeLoad: async () => {
     const sessionId =
       typeof document !== 'undefined'
@@ -40,7 +68,7 @@ function AdminNutzerPage() {
   const ROW_HEIGHT = 52
 
   const usersQuery = useQuery(() => ({
-    queryKey: ['admin', 'users', auth.session?.sessionId ?? null],
+    queryKey: qk.adminUsers(auth.session?.sessionId),
     enabled: Boolean(auth.session?.sessionId),
     queryFn: () => getUsersForAdmin({ data: { sessionId: auth.session?.sessionId } }),
     staleTime: 30 * 1000,
@@ -71,17 +99,17 @@ function AdminNutzerPage() {
 
   const createUserMutation = useMutation(() => ({
     mutationFn: (payload) => createUser({ data: payload }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'users'] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: qk.adminUsersRoot() }),
   }))
 
   const updateUserMutation = useMutation(() => ({
     mutationFn: (payload) => updateUser({ data: payload }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'users'] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: qk.adminUsersRoot() }),
   }))
 
   const deleteUserMutation = useMutation(() => ({
     mutationFn: (payload) => deleteUser({ data: payload }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'users'] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: qk.adminUsersRoot() }),
   }))
 
   function openCreateModal() {
@@ -324,51 +352,15 @@ function AdminNutzerPage() {
               }}
             >
               <createUserForm.AppField name="name">
-                {(field) => (
-                  <label className="block">
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Name</span>
-                    <input
-                      value={field.state.value}
-                      onBlur={field.handleBlur}
-                      onInput={(e) => field.handleChange(e.currentTarget.value)}
-                      placeholder="Max Mustermann"
-                      className="mt-1 w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-                    />
-                  </label>
-                )}
+                {(field) => <FormTextField field={field} label="Name" placeholder="Max Mustermann" />}
               </createUserForm.AppField>
 
               <createUserForm.AppField name="email">
-                {(field) => (
-                  <label className="block">
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-200">E-Mail</span>
-                    <input
-                      type="email"
-                      value={field.state.value}
-                      onBlur={field.handleBlur}
-                      onInput={(e) => field.handleChange(e.currentTarget.value)}
-                      placeholder="name@firma.de"
-                      className="mt-1 w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-                    />
-                  </label>
-                )}
+                {(field) => <FormTextField field={field} type="email" label="E-Mail" placeholder="name@firma.de" />}
               </createUserForm.AppField>
 
               <createUserForm.AppField name="role">
-                {(field) => (
-                  <label className="block">
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Rolle</span>
-                    <select
-                      value={field.state.value}
-                      onBlur={field.handleBlur}
-                      onChange={(e) => field.handleChange(e.currentTarget.value)}
-                      className="mt-1 w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-                    >
-                      <option value="user">user</option>
-                      <option value="admin">admin</option>
-                    </select>
-                  </label>
-                )}
+                {(field) => <FormSelectField field={field} label="Rolle" fallbackValue="user" options={['user', 'admin']} />}
               </createUserForm.AppField>
 
               <div className="pt-2 flex items-center justify-end gap-3">
