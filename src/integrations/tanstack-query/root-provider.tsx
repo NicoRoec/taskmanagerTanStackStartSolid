@@ -1,20 +1,26 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider } from "@tanstack/solid-query";
+
+const sharedQueryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30 * 1000,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+      retry: 1,
+    },
+  },
+});
 
 export function getContext() {
-  const queryClient = new QueryClient()
   return {
-    queryClient,
-  }
+    queryClient: sharedQueryClient,
+  };
 }
 
-export function Provider({
-  children,
-  queryClient,
-}: {
-  children: React.ReactNode
-  queryClient: QueryClient
-}) {
+export function Provider(props) {
+  const client = props.queryClient ?? sharedQueryClient;
+
   return (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-  )
+    <QueryClientProvider client={client}>{props.children}</QueryClientProvider>
+  );
 }

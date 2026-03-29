@@ -1,14 +1,54 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { useQuery } from '@tanstack/react-query';
+import { createFileRoute } from '@tanstack/solid-router';
+import { useQuery } from '@tanstack/solid-query';
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount } from 'solid-js';
+import { createCollection, localOnlyCollectionOptions } from '@tanstack/db';
 import { useAuth } from '../__root';
 import { getDashboardData } from '../../server/task-functions';
+import { qk } from '../../lib/query-keys';
+
+function getSessionIdFromCookie() {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie
+    .split(';')
+    .map((c) => c.trim())
+    .find((c) => c.startsWith('task_session='));
+  return match ? decodeURIComponent(match.split('=')[1]) : null;
+}
 
 export const Route = createFileRoute('/_layout/dashboard')({
   component: DashboardPage,
+  pendingComponent: () => <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-600">Dashboard wird geladen...</div>,
+  errorComponent: ({ error }) => (
+    <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-red-900">
+      <h3 className="mb-2 font-semibold">Fehler in Dashboard-Route</h3>
+      <p>{error?.message ? String(error.message) : String(error)}</p>
+    </div>
+  ),
+  loader: async ({ context }) => {
+    const sessionId = getSessionIdFromCookie();
+    if (!sessionId) return;
+
+    await context.queryClient.ensureQueryData({
+      queryKey: qk.dashboard(sessionId),
+      queryFn: () =>
+        getDashboardData({
+          data: { sessionId },
+        }),
+      staleTime: 60 * 1000,
+    });
+  },
 });
 
+const activitiesCollection = createCollection(
+  localOnlyCollectionOptions({
+    id: 'dashboard-activities',
+    getKey: (item) => item.id,
+  }),
+)
+
 function DashboardPage() {
-  const { session } = useAuth();
+  const auth = useAuth();
+  const [activityRows, setActivityRows] = createSignal([])
 
   /**
    * TanStack Query für Dashboard
@@ -16,25 +56,46 @@ function DashboardPage() {
    * Holt Statistiken und Aktivitäten direkt aus der DB
    * über eine Server Function.
    */
-  const dashboardQuery = useQuery({
-    queryKey: ['dashboard', session?.sessionId ?? null],
-    enabled: Boolean(session?.sessionId),
+  const dashboardQuery = useQuery(() => ({
+    queryKey: qk.dashboard(auth.session?.sessionId),
+    enabled: Boolean(auth.session?.sessionId),
     queryFn: () =>
       getDashboardData({
         data: {
-          sessionId: session?.sessionId,
+          sessionId: auth.session?.sessionId,
         },
       }),
     staleTime: 60 * 1000,
-  });
+  }));
 
-  const stats = dashboardQuery.data?.stats || {
+  const stats = createMemo(() => dashboardQuery.data?.stats || {
     open: 0,
     inProgress: 0,
     done: 0,
-  };
+  });
 
-  const activities = dashboardQuery.data?.activities || [];
+  const activities = createMemo(() => activityRows());
+
+  onMount(() => {
+    const subscription = activitiesCollection.subscribeChanges(() => {
+      setActivityRows([...activitiesCollection.values()])
+    }, { includeInitialState: true })
+
+    onCleanup(() => subscription.unsubscribe())
+  })
+
+  createEffect(() => {
+    const next = dashboardQuery.data?.activities || []
+    const existingKeys = [...activitiesCollection.keys()]
+
+    if (existingKeys.length) {
+      activitiesCollection.delete(existingKeys)
+    }
+
+    if (next.length) {
+      activitiesCollection.insert(next)
+    }
+  })
 
   function formatRelativeDate(value) {
     if (!value) return '—';
@@ -54,26 +115,27 @@ function DashboardPage() {
   }
 
   function getActivityColor(status) {
-    if (status === 'Erledigt') return 'bg-green-500';
-    if (status === 'in Arbeit') return 'bg-yellow-500';
+    const normalized = String(status || '').trim().toLowerCase();
+    if (normalized === 'erledigt') return 'bg-green-500';
+    if (normalized === 'in arbeit') return 'bg-yellow-500';
     return 'bg-blue-500';
   }
 
   return (
-    <div>
+    <div className="h-full min-h-0 flex flex-col">
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h2>
         <p className="text-gray-600 dark:text-gray-400 mt-1 text-sm">Übersicht über Aufgaben aus der Datenbank</p>
       </div>
 
       {/* Statistik-Karten */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 shrink-0">
         {/* Offene Aufgaben */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
           <div className="flex items-start justify-between">
             <div>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Offene Aufgaben</p>
-              <p className="text-3xl font-bold text-gray-900 dark:text-white">{stats.open}</p>
+              <p className="text-3xl font-bold text-gray-900 dark:text-white">{stats().open}</p>
             </div>
             <div className="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
               <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -89,7 +151,7 @@ function DashboardPage() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">In Bearbeitung</p>
-              <p className="text-3xl font-bold text-gray-900 dark:text-white">{stats.inProgress}</p>
+              <p className="text-3xl font-bold text-gray-900 dark:text-white">{stats().inProgress}</p>
             </div>
             <div className="p-3 bg-yellow-50 dark:bg-yellow-900/30 rounded-lg">
               <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -105,7 +167,7 @@ function DashboardPage() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Abgeschlossen</p>
-              <p className="text-3xl font-bold text-gray-900 dark:text-white">{stats.done}</p>
+              <p className="text-3xl font-bold text-gray-900 dark:text-white">{stats().done}</p>
             </div>
             <div className="p-3 bg-green-50 dark:bg-green-900/30 rounded-lg">
               <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -118,25 +180,27 @@ function DashboardPage() {
       </div>
 
       {/* Kürzliche Aktivitäten */}
-      <div className="mt-8">
+      <div className="mt-8 flex-1 min-h-0 flex flex-col">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Kürzliche Aktivitäten</h3>
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 divide-y divide-gray-200 dark:divide-gray-700">
+        <div className="flex-1 min-h-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 divide-y divide-gray-200 dark:divide-gray-700 overflow-y-auto">
           {dashboardQuery.isLoading ? (
             <div className="p-4 text-sm text-gray-500 dark:text-gray-400">Dashboard wird geladen...</div>
-          ) : activities.length === 0 ? (
+          ) : activities().length === 0 ? (
             <div className="p-4 text-sm text-gray-500 dark:text-gray-400">Keine Aktivitäten vorhanden.</div>
           ) : (
-            activities.map((activity) => (
-              <div key={activity.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className={`w-2 h-2 rounded-full ${getActivityColor(activity.status)}`}></div>
-                  <p className="text-sm text-gray-700 dark:text-gray-300">
-                    Aufgabe <span className="font-medium">"{activity.title}"</span> (Status: {activity.status})
-                  </p>
-                  <span className="text-xs text-gray-500 dark:text-gray-400 ml-auto">{formatRelativeDate(activity.updatedAt)}</span>
+            <For each={activities()}>
+              {(activity) => (
+                <div className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-2 h-2 rounded-full ${getActivityColor(activity.status)}`}></div>
+                    <p className="text-sm text-gray-700 dark:text-gray-300">
+                      Aufgabe <span className="font-medium">"{activity.title}"</span> (Status: {activity.status})
+                    </p>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 ml-auto">{formatRelativeDate(activity.updatedAt)}</span>
+                  </div>
                 </div>
-              </div>
-            ))
+              )}
+            </For>
           )}
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
+import { createFileRoute, Link } from '@tanstack/solid-router';
 
 /**
  * Nested Route (Verschachtelte Route): /aufgaben/neu

@@ -9,7 +9,7 @@
  * - JWT oder Session-Tokens mit Expiration nutzen
  * - Sicherheitsfeatures wie CSRF-Schutz implementieren
  * 
- * Für diese Demo verwenden wir:
+ * In dieser Implementierung verwenden wir:
  * - Ein einfaches Objekt, das Session-Daten speichert
  * - Session-IDs als Keys
  * - Benutzerdaten (id, username, role) als Values

@@ -140,13 +140,13 @@ async function seedTasksIfEmpty(db) {
   );
 }
 
-async function seedVirtualDemoTasksIfNeeded(db) {
+async function seedVirtualTasksIfNeeded(db) {
   /**
-   * TanStack Virtual Demo-Daten
+  * TanStack Virtual Seed-Daten
    * ===========================
    *
    * Für Virtualisierung brauchen wir viele Datensätze. Deshalb erzeugen wir
-   * einmalig 1200 zusätzliche Tasks mit Prefix "[VIRTUAL DEMO]".
+  * einmalig 1200 zusätzliche Tasks mit Prefix "[VIRTUAL TASK]".
    *
    * Warum?
    * - Mit wenigen Rows ist der Performance-Unterschied kaum sichtbar.
@@ -157,7 +157,7 @@ async function seedVirtualDemoTasksIfNeeded(db) {
     db,
     `SELECT COUNT(*) as count
      FROM tasks
-     WHERE title LIKE '[VIRTUAL DEMO]%'`
+      WHERE title LIKE '[VIRTUAL TASK]%'`
   );
 
   const existing = Number(row?.count || 0);
@@ -175,7 +175,7 @@ async function seedVirtualDemoTasksIfNeeded(db) {
       const index = existing + start + i + 1;
       placeholders.push('(?, ?, ?, ?, ?, ?, ?, datetime(\'now\'), datetime(\'now\'))');
       params.push(
-        `[VIRTUAL DEMO] Aufgabe ${index}`,
+        `[VIRTUAL TASK] Aufgabe ${index}`,
         'Erledigt',
         'Niedrig',
         '2026-12-31',
@@ -229,7 +229,7 @@ export async function getDb() {
       await migrateAssigneeUserName(db);
       await seedUsersIfEmpty(db);
       await seedTasksIfEmpty(db);
-      await seedVirtualDemoTasksIfNeeded(db);
+      await seedVirtualTasksIfNeeded(db);
       return db;
     })();
   }
